@@ -2,7 +2,6 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package edu.wpi.first.wpilibj.templates;
 
 import com.sun.squawk.util.MathUtils;
@@ -15,9 +14,8 @@ public class Vector {
 
     private double x;
     private double y;
-
-    static final int kRectangular = 1;
-    private static final int kPolar = 2;
+    //static final int kRectangular = 1;
+    //static final int kPolar = 2;
 
     /**
      * @return the x
@@ -54,14 +52,18 @@ public class Vector {
         return Math.sqrt(x * x + y * y);
     }
 
+    public double getR2(){
+        return x * x + y * y;
+    }
+
     /**
      * @param r the r to set
      */
     public void setR(double r) {
-        if(getR() == 0){
+        if (getR2() == 0) {
             x = r;
             y = 0;
-        }else{
+        } else {
             x *= r / getR();
             y *= r / getR();
         }
@@ -75,6 +77,10 @@ public class Vector {
         return MathUtils.atan2(y, x);
     }
 
+    public double getThDeg() {
+        return getTh() * 180 / Math.PI;
+    }
+    
     /**
      * @param th the theta to set
      */
@@ -84,13 +90,37 @@ public class Vector {
         y = r * Math.sin(th);
     }
 
-    public void setRect(double x, double y){
+    public void setThDeg(double th) {
+        setTh(th / 180 * Math.PI);
+    }
+
+    public void setRect(double x, double y) {
         setX(x);
         setY(y);
     }
 
-    public void setPolar(double r, double th){
+    public void setPolar(double r, double th) {
         setR(r);
         setTh(th);
+    }
+
+    /**
+     * Normalize joystick values to unit circle
+     * Only needs to be called once after reading joystick values
+     */
+    public void normalize() {
+        double th = getTh();
+        double k = Math.max(Math.abs(Math.sin(th)), Math.abs(Math.cos(th)));
+        x *= k;
+        y *= k;
+    }
+
+    public void rotate(double angle){
+        setThDeg(getThDeg() + angle);
+    }
+    
+    public void zero(){
+        x = 0;
+        y = 0;
     }
 }

@@ -8,7 +8,7 @@
 package edu.wpi.first.wpilibj.templates;
 
 
-import edu.wpi.first.wpilibj.Accelerometer;
+import edu.wpi.first.wpilibj.ADXL345_I2C;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -16,6 +16,8 @@ import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.Gyro;
 import edu.wpi.first.wpilibj.Jaguar;
 import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.PIDController;
+import edu.wpi.first.wpilibj.PIDOutput;
 import edu.wpi.first.wpilibj.RobotDrive;
 
 /**
@@ -44,21 +46,21 @@ public class Robot extends IterativeRobot {
     private DigitalInput lineMid;
     private DigitalInput lineLeft;
 
-
-    private Accelerometer accelX;
-    private Accelerometer accelY;
-    private Accelerometer accelZ;
+    private ADXL345_I2C accel;
+    private Thermometer therm;
     private Gyro gyroXY;
 
+    private PIDController turnController;
 
     private static final int kSlotDigital = 2;
     private static final int kSlotAnalog = 1;
     private static final int kSlotPneumatic = 7;
 
     private static final double kEncDistPerPulse = 30.0;  // in
-    private static final double kAccelSensitivity = 0.03; // V/(m/s^2)
-    private static final double kAccelZero = 2.50;        // V
     private static final double kGyroSensitivity = 0.05;  // V/(rad/s)
+
+    private static final boolean kInvertLineSensor = false; // Test dark line on white
+    private static final double kDeadband = 0.2;
 
     public void robotInit() {
 
@@ -78,10 +80,9 @@ public class Robot extends IterativeRobot {
         lineMid = new DigitalInput(kSlotDigital, 6);
         lineLeft = new DigitalInput(kSlotDigital, 7);
 
-        accelX = new Accelerometer(kSlotAnalog, 1);
-        accelY = new Accelerometer(kSlotAnalog, 2);
-        accelZ = new Accelerometer(kSlotAnalog, 3);
-        gyroXY = new Gyro(kSlotAnalog, 4);
+        accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
+        therm = new Thermometer(kSlotAnalog, 2);
+        gyroXY = new Gyro(kSlotAnalog, 1);
 
 
         encLeft.setDistancePerPulse(kEncDistPerPulse);
@@ -89,20 +90,24 @@ public class Robot extends IterativeRobot {
         encLeft.reset();
         encRight.reset();
 
-        accelX.setSensitivity(kAccelSensitivity);
-        accelY.setSensitivity(kAccelSensitivity);
-        accelZ.setSensitivity(kAccelSensitivity);
-        accelX.setZero(kAccelZero);
-        accelY.setZero(kAccelZero);
-        accelZ.setZero(kAccelZero);
+        turnController = new PIDController(0.08, 0.0, 0.30, gyroXY, new PIDOutput() {
+            public void pidWrite(double output) {
+                drive.arcadeDrive(0, output);
+            }
+        }, .005);
+        turnController.setInputRange(-360.0, 360.0);
+        turnController.setTolerance(1 / 90. * 100);
+        //turnController.setContinuous(true);
+        turnController.disable();
 
-        gyroXY.setSensitivity(kGyroSensitivity);
-        gyroXY.reset();
+        // Calibration works well enough
+        //gyroXY.setSensitivity(kGyroSensitivity);
+        //gyroXY.reset();
 
     }
     
     public void disabledInit(){
-        
+        turnController.disable();
     }
 
     public void disabledPeriodic(){
@@ -110,7 +115,7 @@ public class Robot extends IterativeRobot {
     }
 
     public void autonomousInit(){
-        
+        turnController.disable();
     }
 
     public void autonomousPeriodic() {
@@ -118,11 +123,24 @@ public class Robot extends IterativeRobot {
     }
 
     public void teleopInit(){
-        
+        //turnController.setSetpoint(gyroXY.pidGet());
+        //turnController.enable();
     }
     
     public void teleopPeriodic() {
-        
+        Vector dir = new Vector();
+        dir.setX(jsLeft.getX());
+        dir.setY(jsLeft.getY());
+        //dir.normalize();
+        dir.rotate(gyroXY.getAngle());
+
+        if(dir.getR2() > kDeadband){
+            drive.arcadeDrive(dir.getX(), dir.getY());
+        }else{
+            //turnController.setSetpoint(gyroXY.pidGet());
+            //turnController.disable();
+            drive.stopMotor();
+
+        }
     }
-    
 }
