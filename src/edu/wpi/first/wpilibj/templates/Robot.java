@@ -8,9 +8,14 @@
 package edu.wpi.first.wpilibj.templates;
 
 
+import edu.wpi.first.wpilibj.Accelerometer;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.Gyro;
+import edu.wpi.first.wpilibj.Jaguar;
+import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.RobotDrive;
 
 /**
@@ -23,14 +28,48 @@ import edu.wpi.first.wpilibj.RobotDrive;
 public class Robot extends IterativeRobot {
     
     RobotDrive drive;
-    DriverStation ds;
+    Jaguar jagLeft;
+    Jaguar jagRight;
 
-    DigitalInput lineRt;
-    DigitalInput lineCtr;
-    DigitalInput lineLeft;
+    DriverStation ds;
+    Joystick jsLeft;
+    Joystick jsRight;
     
+    Encoder encLeft;
+    Encoder encRight;
+
+    DigitalInput lineRight;
+    DigitalInput lineMid;
+    DigitalInput lineLeft;
+
+    Accelerometer accel;
+    Gyro gyro;
+
+
+    static private int crioSlotDigital;
+    static private int crioSlotAnalog;
+    static private int crioSlotPneumatic;
 
     public void robotInit() {
+
+        jagLeft = new Jaguar(crioSlotDigital, 1);
+        jagRight = new Jaguar(crioSlotDigital, 2);
+
+        drive = new RobotDrive(jagLeft, jagRight);
+
+        ds = DriverStation.getInstance();
+        jsLeft = new Joystick(1);
+        jsRight = new Joystick(2);
+
+        encLeft = new Encoder(crioSlotDigital, 1, 2);
+        encRight = new Encoder(crioSlotDigital, 3, 4);
+
+        lineRight = new DigitalInput(crioSlotDigital, 5);
+        lineMid = new DigitalInput(crioSlotDigital, 6);
+        lineLeft = new DigitalInput(crioSlotDigital, 7);
+
+        accel = new Accelerometer(crioSlotAnalog, 1, 2, 3);
+        gyro = new Gyro(crioSlotAnalog, 4);
 
     }
     
