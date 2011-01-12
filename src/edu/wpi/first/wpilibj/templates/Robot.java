@@ -51,14 +51,14 @@ public class Robot extends IterativeRobot {
     private Gyro gyroXY;
 
 
-    static private int kSlotDigital = 2;
-    static private int kSlotAnalog = 1;
-    static private int kSlotPneumatic = 7;
+    private static final int kSlotDigital = 2;
+    private static final int kSlotAnalog = 1;
+    private static final int kSlotPneumatic = 7;
 
-    static private double kEncDistPerPulse = 30.0;  // in
-    static private double kAccelSensitivity = 0.03; // V/(m/s^2)
-    static private double kAccelZero = 2.50;        // V
-    static private double kGyroSensitivity = 0.05;  // V/(rad/s)
+    private static final double kEncDistPerPulse = 30.0;  // in
+    private static final double kAccelSensitivity = 0.03; // V/(m/s^2)
+    private static final double kAccelZero = 2.50;        // V
+    private static final double kGyroSensitivity = 0.05;  // V/(rad/s)
 
     public void robotInit() {
 
