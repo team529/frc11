@@ -26,34 +26,44 @@ import edu.wpi.first.wpilibj.RobotDrive;
  * directory.
  */
 public class Robot extends IterativeRobot {
+
+
+    private Jaguar jagLeft;
+    private Jaguar jagRight;
+
+    private RobotDrive drive;
+   
+    private DriverStation ds;
+    private Joystick jsLeft;
+    private Joystick jsRight;
     
-    RobotDrive drive;
-    Jaguar jagLeft;
-    Jaguar jagRight;
+    private Encoder encLeft;
+    private Encoder encRight;
 
-    DriverStation ds;
-    Joystick jsLeft;
-    Joystick jsRight;
-    
-    Encoder encLeft;
-    Encoder encRight;
-
-    DigitalInput lineRight;
-    DigitalInput lineMid;
-    DigitalInput lineLeft;
-
-    Accelerometer accel;
-    Gyro gyro;
+    private DigitalInput lineRight;
+    private DigitalInput lineMid;
+    private DigitalInput lineLeft;
 
 
-    static private int crioSlotDigital;
-    static private int crioSlotAnalog;
-    static private int crioSlotPneumatic;
+    private Accelerometer accelX;
+    private Accelerometer accelY;
+    private Accelerometer accelZ;
+    private Gyro gyroXY;
+
+
+    static private int kSlotDigital = 2;
+    static private int kSlotAnalog = 1;
+    static private int kSlotPneumatic = 7;
+
+    static private double kEncDistPerPulse = 30.0;  // in
+    static private double kAccelSensitivity = 0.03; // V/(m/s^2)
+    static private double kAccelZero = 2.50;        // V
+    static private double kGyroSensitivity = 0.05;  // V/(rad/s)
 
     public void robotInit() {
 
-        jagLeft = new Jaguar(crioSlotDigital, 1);
-        jagRight = new Jaguar(crioSlotDigital, 2);
+        jagLeft = new Jaguar(kSlotDigital, 1);
+        jagRight = new Jaguar(kSlotDigital, 2);
 
         drive = new RobotDrive(jagLeft, jagRight);
 
@@ -61,15 +71,33 @@ public class Robot extends IterativeRobot {
         jsLeft = new Joystick(1);
         jsRight = new Joystick(2);
 
-        encLeft = new Encoder(crioSlotDigital, 1, 2);
-        encRight = new Encoder(crioSlotDigital, 3, 4);
+        encLeft = new Encoder(kSlotDigital, 1, 2);
+        encRight = new Encoder(kSlotDigital, 3, 4);
 
-        lineRight = new DigitalInput(crioSlotDigital, 5);
-        lineMid = new DigitalInput(crioSlotDigital, 6);
-        lineLeft = new DigitalInput(crioSlotDigital, 7);
+        lineRight = new DigitalInput(kSlotDigital, 5);
+        lineMid = new DigitalInput(kSlotDigital, 6);
+        lineLeft = new DigitalInput(kSlotDigital, 7);
 
-        accel = new Accelerometer(crioSlotAnalog, 1, 2, 3);
-        gyro = new Gyro(crioSlotAnalog, 4);
+        accelX = new Accelerometer(kSlotAnalog, 1);
+        accelY = new Accelerometer(kSlotAnalog, 2);
+        accelZ = new Accelerometer(kSlotAnalog, 3);
+        gyroXY = new Gyro(kSlotAnalog, 4);
+
+
+        encLeft.setDistancePerPulse(kEncDistPerPulse);
+        encRight.setDistancePerPulse(kEncDistPerPulse);
+        encLeft.reset();
+        encRight.reset();
+
+        accelX.setSensitivity(kAccelSensitivity);
+        accelY.setSensitivity(kAccelSensitivity);
+        accelZ.setSensitivity(kAccelSensitivity);
+        accelX.setZero(kAccelZero);
+        accelY.setZero(kAccelZero);
+        accelZ.setZero(kAccelZero);
+
+        gyroXY.setSensitivity(kGyroSensitivity);
+        gyroXY.reset();
 
     }
     
