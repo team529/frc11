@@ -1,6 +1,6 @@
 MIDlet-Name: FRC2011
 MIDlet-Version: 1.0.0
 MIDlet-Vendor: FIRST
-MIDlet-1: Robot, , edu.wpi.first.wpilibj.templates.Robot
+MIDlet-1: Robot, ,  edu.wpi.first.wpilibj.robot11.Robot
 MicroEdition-Profile: IMP-1.0
 MicroEdition-Configuration: CLDC-1.1

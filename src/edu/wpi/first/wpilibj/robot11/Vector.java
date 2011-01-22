@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package edu.wpi.first.wpilibj.templates;
+package edu.wpi.first.wpilibj.robot11;
 
 import com.sun.squawk.util.MathUtils;
 
@@ -113,6 +113,13 @@ public class Vector {
         double k = Math.max(Math.abs(Math.sin(th)), Math.abs(Math.cos(th)));
         x *= k;
         y *= k;
+    }
+
+    public void unormalize(){
+        double th = getTh();
+        double k = Math.max(Math.abs(Math.sin(th)), Math.abs(Math.cos(th)));
+        x /= k;
+        y /= k;
     }
 
     public void rotate(double angle){
