@@ -222,7 +222,17 @@ public class Robot extends IterativeRobot {
     }
 
     public void disabledPeriodic(){
-
+        SmartDashboard.log(gyroXY.getAngle(), "Gyro");
+        SmartDashboard.log(therm.getTemperature(), "Temp (C)");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
+        SmartDashboard.log(lineLeft.get(), "Line L");
+        SmartDashboard.log(lineMid.get(), "Line M");
+        SmartDashboard.log(lineRight.get(), "Line R");
+        SmartDashboard.log(kSpeedP, "Speed loop P");
+        SmartDashboard.log(kSpeedI, "Speed loop I");
+        SmartDashboard.log(kSpeedD, "Speed loop D");
     }
 
     public void autonomousInit(){
@@ -237,6 +247,39 @@ public class Robot extends IterativeRobot {
         }else{
             drive.drive(kAutoSpeed, 0.0);
         }
+
+        if(kUseCAN && (period++ % 100 == 0)){ // Don't overload the CAN network
+            try {
+                SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
+                SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
+                SmartDashboard.log(cjagLeft.getOutputCurrent(), "Jag L Iout");
+                SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
+                SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
+                SmartDashboard.log(cjagRight.getOutputCurrent(), "Jag R Iout");
+
+            } catch (CANTimeoutException ex) {
+                ex.printStackTrace();
+                SmartDashboard.log(529, "Jag L Speed");
+                SmartDashboard.log(529, "Jag L Vout");
+                SmartDashboard.log(529, "Jag L Iout");
+                SmartDashboard.log(529, "Jag R Speed");
+                SmartDashboard.log(529, "Jag R Vout");
+                SmartDashboard.log(529, "Jag R Iout");
+                System.out.println("CAN Error");
+            }
+        }
+
+        SmartDashboard.log(gyroXY.getAngle(), "Gyro");
+        SmartDashboard.log(therm.getTemperature(), "Temp (C)");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
+        SmartDashboard.log(lineLeft.get(), "Line L");
+        SmartDashboard.log(lineMid.get(), "Line M");
+        SmartDashboard.log(lineRight.get(), "Line R");
+        SmartDashboard.log(kSpeedP, "Speed loop P");
+        SmartDashboard.log(kSpeedI, "Speed loop I");
+        SmartDashboard.log(kSpeedD, "Speed loop D");
     }
 
     public void teleopInit(){
@@ -288,10 +331,13 @@ public class Robot extends IterativeRobot {
  */
         if(kUseCAN && (period++ % 100 == 0)){ // Don't overload the CAN network
             try {
+
                 SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
+                SmartDashboard.log(cjagLeft.getPosition(), "Jag L Dist");
                 SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
                 SmartDashboard.log(cjagLeft.getOutputCurrent(), "Jag L Iout");
                 SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
+                SmartDashboard.log(cjagRight.getPosition(), "Jag R Dist");
                 SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
                 SmartDashboard.log(cjagRight.getOutputCurrent(), "Jag R Iout");
 
@@ -305,6 +351,11 @@ public class Robot extends IterativeRobot {
                 SmartDashboard.log(529, "Jag R Iout");
                 System.out.println("CAN Error");
             }
+        }else{
+            SmartDashboard.log(encLeft.getDistance(), "Enc L Dist");
+            SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
+            SmartDashboard.log(encRight.getDistance(), "Enc R Dist");
+            SmartDashboard.log(encRight.getRate(), "Enc R Speed");
         }
         
         SmartDashboard.log(gyroXY.getAngle(), "Gyro");
@@ -319,4 +370,6 @@ public class Robot extends IterativeRobot {
         SmartDashboard.log(kSpeedI, "Speed loop I");
         SmartDashboard.log(kSpeedD, "Speed loop D");
     }
+
+
 }
