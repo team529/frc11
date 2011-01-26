@@ -120,8 +120,8 @@ public class PIDSpeedController implements PIDOutput, ISensor, SpeedController{
     }
 
     private void initPID(){
-        m_pid = new PIDController(kDefaultP, kDefaultI, kDefaultD, m_speedSource, m_speedOutput);
-        m_pid.setInputRange(-m_speedRange, m_speedRange);
+        //m_pid = new PIDController(kDefaultP, kDefaultI, kDefaultD, m_speedSource, m_speedOutput);
+        //m_pid.setInputRange(-m_speedRange, m_speedRange);
     }
 
     public double getSpeed(){
@@ -183,7 +183,7 @@ public class PIDSpeedController implements PIDOutput, ISensor, SpeedController{
     }
 
     public void disable() {
-        m_pid.disable();
+        //m_pid.disable();
         m_motor.disable();
         if(m_useDual){
             m_motorD.disable();
@@ -191,18 +191,18 @@ public class PIDSpeedController implements PIDOutput, ISensor, SpeedController{
     }
 
     public void setPID(double p, double i, double d){
-        m_pid.setPID(p, i, d);
+        //m_pid.setPID(p, i, d);
     }
 
     public void enablePID(){
         m_pidEnabled = true;
-        m_pid.enable();
+        //m_pid.enable();
         setMotor(0);
     }
 
     public void disablePID(){
         m_pidEnabled = false;
-        m_pid.disable();
+        //m_pid.disable();
         setMotor(0);
     }
 
