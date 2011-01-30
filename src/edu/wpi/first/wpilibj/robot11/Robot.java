@@ -22,6 +22,7 @@ import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.PIDController;
 import edu.wpi.first.wpilibj.SmartDashboard;
 import edu.wpi.first.wpilibj.Solenoid;
+import edu.wpi.first.wpilibj.SpeedController;
 import edu.wpi.first.wpilibj.can.CANTimeoutException;
 
 /**
@@ -38,10 +39,17 @@ public class Robot extends IterativeRobot {
     private CANJaguar cjagLeftD;
     private CANJaguar cjagRightD;
 
+    private CANJaguar cjagArm;
+    private CANJaguar cjagArmD;
+
     private Jaguar jagLeft;
     private Jaguar jagRight;
     private Jaguar jagLeftD;
     private Jaguar jagRightD;
+
+    private SpeedController jagArm;
+    private SpeedController jagArmD;
+    
 
     private PIDSpeedController motorLeft;
     private PIDSpeedController motorRight;
@@ -164,6 +172,10 @@ public class Robot extends IterativeRobot {
                     motorLeft = new PIDSpeedController(cjagLeft);
                     motorRight = new PIDSpeedController(cjagRight);
                 }
+
+                jagArm = cjagArm = new CANJaguar(20);
+                jagArmD = cjagArmD = new CANJaguar(21);
+
             } catch (CANTimeoutException ex) {
                 ex.printStackTrace();
             }
@@ -188,6 +200,9 @@ public class Robot extends IterativeRobot {
                 motorLeft = new PIDSpeedController(jagLeft, encLeft);
                 motorRight = new PIDSpeedController(jagRight, encRight);
             }
+
+            jagArm = new Jaguar(kSlotDigital, 5);
+            jagArmD = new Jaguar(kSlotDigital, 6);
         }
 
         drive = new CustomRobotDrive(motorLeft, motorRight);
@@ -335,6 +350,9 @@ public class Robot extends IterativeRobot {
                 // Map solenoids 1-8 to buttons 2-9
                 jsRight.getRawButton(i + 2);
             }
+
+            jagArm.set(jsRight.getY());
+            jagArmD.set(jsRight.getY());
         }
 
         log();
