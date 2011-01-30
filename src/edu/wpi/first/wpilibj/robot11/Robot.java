@@ -10,15 +10,18 @@ package edu.wpi.first.wpilibj.robot11;
 
 import edu.wpi.first.wpilibj.ADXL345_I2C;
 import edu.wpi.first.wpilibj.CANJaguar;
+import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStationEnhancedIO;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.Gyro;
 import edu.wpi.first.wpilibj.Jaguar;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.PIDController;
 import edu.wpi.first.wpilibj.SmartDashboard;
+import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.can.CANTimeoutException;
 
 /**
@@ -46,6 +49,7 @@ public class Robot extends IterativeRobot {
     private CustomRobotDrive drive;
    
     private DriverStation ds;
+    private DriverStationEnhancedIO dsX;
     private Joystick jsLeft;
     private Joystick jsRight;
     
@@ -56,9 +60,15 @@ public class Robot extends IterativeRobot {
     private DigitalInput lineMid;
     private DigitalInput lineLeft;
 
+    private Compressor compressor;
+    private Solenoid[] solenoids;
+    private PressureTransducer transducer;
+
     private ADXL345_I2C accel;
     private Thermometer therm;
     private Gyro gyroXY;
+
+    private PositionTracker posTrack;
 
     private PIDController turnController;
 
@@ -77,6 +87,8 @@ public class Robot extends IterativeRobot {
     private static final boolean kUsePidSpeed = false;
     // Use gyro to use relative controls
     private static final boolean kUseGyro = false;
+    // Use absolute position tracking
+    private static final boolean kUsePositionTracker = false;
 
     //
     private static final int kEncCodesPerRev = 250;       // rev
@@ -100,6 +112,20 @@ public class Robot extends IterativeRobot {
     // Autonomous turing radius as %
     private static final double kAutoCurve = 0.5;
 
+
+    // Robot Constants for tracking position
+    // Scaling factor, should be redundant.
+    private static final double kEncDistScale = 1.0;
+    // Distance between the wheels of the robot
+    private static final double kWheelSpacing = 20;
+    // Update only 1:k loops. Probably unessassary?
+    private static final int kPositionUpdatePeriod = 1;
+    // Initial position of the robot
+    private static final double kInitialX = 0;
+    private static final double kInitialY = 0;
+    private static final double kInitialTheta = Math.PI / 2;
+
+    // Track looping period
     private long period;
 
     private void canJaguarInit(CANJaguar cjag) throws CANTimeoutException{
@@ -166,7 +192,7 @@ public class Robot extends IterativeRobot {
 
         drive = new CustomRobotDrive(motorLeft, motorRight);
 
-            drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontLeft, false);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontLeft, false);
         //drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, true);
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, true);
         //drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearRight, false);
@@ -184,6 +210,8 @@ public class Robot extends IterativeRobot {
         }
 
         ds = DriverStation.getInstance();
+        dsX = ds.getEnhancedIO();
+
         jsLeft = new Joystick(1);
         jsRight = new Joystick(2);
 
@@ -192,11 +220,38 @@ public class Robot extends IterativeRobot {
         lineMid = new DigitalInput(kSlotDigital, 6);
         lineLeft = new DigitalInput(kSlotDigital, 7);
 
+
+        // Pressure Switch: 14; Compressor Relay: 1
+        compressor = new Compressor(kSlotDigital, 14, kSlotDigital, 1);
+        solenoids = new Solenoid[8];
+        for(int i = 0; i < 8; i++){
+            solenoids[i] = new Solenoid(kSlotPneumatic, i+1);
+        }
+
+        transducer = new PressureTransducer(kSlotAnalog, 3);
+
         accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
         therm = new Thermometer(kSlotAnalog, 2);
         gyroXY = new Gyro(kSlotAnalog, 1);
 
+        // Calibration works well enough
+        gyroXY.setSensitivity(kGyroSensitivity);
+        gyroXY.reset();
 
+
+        if(kUsePositionTracker){
+            if(kUseCAN){
+                posTrack = new PositionTracker(cjagLeft, cjagRight);
+            }else{
+                posTrack = new PositionTracker(encLeft, encRight);
+            }
+            // Initialize position information
+            posTrack.setWheelSpacing(kWheelSpacing);
+            posTrack.setEncScale(kEncDistScale);
+            posTrack.setX(kInitialX);
+            posTrack.setY(kInitialY);
+            posTrack.setTheta(kInitialTheta);
+        }
         
 
 /*        turnControllerd = new PIDController(0.08, 0.0, 0.30, gyroXY, new PIDOutput() {
@@ -209,11 +264,9 @@ public class Robot extends IterativeRobot {
         //turnController.setContinuous(true);
         //turnController.disable();
 
-        // Calibration works well enough
-        gyroXY.setSensitivity(kGyroSensitivity);
-        gyroXY.reset();
+        
 
-        SmartDashboard.init();
+        //SmartDashboard.init();
     }
     
     public void disabledInit(){
@@ -221,17 +274,12 @@ public class Robot extends IterativeRobot {
     }
 
     public void disabledPeriodic(){
-        SmartDashboard.log(gyroXY.getAngle(), "Gyro");
-        SmartDashboard.log(therm.getTemperature(), "Temp (C)");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
-        SmartDashboard.log(lineLeft.get(), "Line L");
-        SmartDashboard.log(lineMid.get(), "Line M");
-        SmartDashboard.log(lineRight.get(), "Line R");
-        SmartDashboard.log(kSpeedP, "Speed loop P");
-        SmartDashboard.log(kSpeedI, "Speed loop I");
-        SmartDashboard.log(kSpeedD, "Speed loop D");
+        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
+            posTrack.update();
+        }
+
+        log();
+        
     }
 
     public void autonomousInit(){
@@ -239,6 +287,10 @@ public class Robot extends IterativeRobot {
     }
 
     public void autonomousPeriodic() {
+        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
+            posTrack.update();
+        }
+
         if(lineLeft.get() ^ kInvertLineSensor){
             drive.drive(kAutoSpeed, -kAutoCurve);
         }else if(lineRight.get() ^ kInvertLineSensor){
@@ -247,40 +299,7 @@ public class Robot extends IterativeRobot {
             drive.drive(kAutoSpeed, 0.0);
         }
 
-        if(kUseCAN && (period++ % 100 == 0)){ // Don't overload the CAN network
-            try {
-                //SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
-                //SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
-                SmartDashboard.log(cjagLeft.getOutputCurrent(), "Jag L Iout");
-                SmartDashboard.log(cjagLeftD.getOutputCurrent(), "Jag LD Iout");
-                //SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
-                SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
-                SmartDashboard.log(cjagRightD.getOutputVoltage(), "Jag RD Vout");
-                //SmartDashboard.log(cjagRight.getOutputCurrent(), "Jag R Iout");
-
-            } catch (CANTimeoutException ex) {
-                ex.printStackTrace();
-                SmartDashboard.log(529, "Jag L Speed");
-                SmartDashboard.log(529, "Jag L Vout");
-                SmartDashboard.log(529, "Jag L Iout");
-                SmartDashboard.log(529, "Jag R Speed");
-                SmartDashboard.log(529, "Jag R Vout");
-                SmartDashboard.log(529, "Jag R Iout");
-                System.out.println("CAN Error");
-            }
-        }
-
-        SmartDashboard.log(gyroXY.getAngle(), "Gyro");
-        SmartDashboard.log(therm.getTemperature(), "Temp (C)");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
-        SmartDashboard.log(lineLeft.get(), "Line L");
-        SmartDashboard.log(lineMid.get(), "Line M");
-        SmartDashboard.log(lineRight.get(), "Line R");
-        SmartDashboard.log(kSpeedP, "Speed loop P");
-        SmartDashboard.log(kSpeedI, "Speed loop I");
-        SmartDashboard.log(kSpeedD, "Speed loop D");
+        log();
     }
 
     public void teleopInit(){
@@ -289,87 +308,99 @@ public class Robot extends IterativeRobot {
     }
     
     public void teleopPeriodic() {
-        Vector dir = new Vector();
-        dir.setX(jsLeft.getX());
-        dir.setY(jsLeft.getY());
-
-        if(kUseGyro){
-            dir.normalize();
-            dir.rotate(gyroXY.getAngle());
-            dir.unormalize();
-        }
-        
-
-        //System.out.println("Gyro" + gyroXY.getAngle());
-        if(dir.getR2() > kDeadband){
-            drive.arcadeDrive(dir.getX(), dir.getY());
-        }else{
-            //turnController.setSetpoint(gyroXY.pidGet());
-            //turnController.disable();
-            drive.stopMotor();
+        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
+            posTrack.update();
         }
 
-       
-/*
-        if(jsLeft.getTrigger() && (period++ % 100 == 0)){
-            System.out.println("\n\nDebugging:");
-            if(kUseCAN){
-                try {
-                    System.out.println("Left CAN Jag: Speed:" + cjagLeft.getSpeed() + "; Vout:" + cjagLeft.getOutputVoltage() + "; Iout:" + cjagLeft.getOutputCurrent() + "; PID:(" + cjagLeft.getP() + "," + cjagLeft.getI() + "," + cjagLeft.getD() + ")");
-                    System.out.println("Rght CAN Jag: Speed:" + cjagRight.getSpeed() + "; Vout:" + cjagRight.getOutputVoltage() + "; Iout:" + cjagRight.getOutputCurrent() + "; PID:(" + cjagRight.getP() + "," + cjagRight.getI() + "," + cjagRight.getD() + ")");
-                } catch (CANTimeoutException ex) {
-                    //ex.printStackTrace();
-                    System.out.println("CAN Error");
-                }
+        if(ds.isNewControlData()){
+            Vector dir = new Vector();
+            dir.setX(jsLeft.getX());
+            dir.setY(jsLeft.getY());
+
+            if(kUseGyro){
+                dir.normalize();
+                dir.rotate(gyroXY.getAngle());
+                dir.unormalize();
             }
-            System.out.println("Gyro:" + gyroXY.getAngle());
-            System.out.println("Therm: " + therm.getTemperature());
-            System.out.println("Accel: X: " + accel.getAcceleration(ADXL345_I2C.Axes.kX) + "");
-            System.out.println("Line: Left: " + lineLeft.get() + "; Mid: " + lineMid.get() + "; Right: " + lineRight.get() + "; Inverted: " + kInvertLineSensor);
-            
-        }
- *
- */
-        if(kUseCAN && (period++ % 100 == 0)){ // Don't overload the CAN network
-            try {
+            //System.out.println("Gyro" + gyroXY.getAngle());
+            if(dir.getR2() > kDeadband){
+                drive.arcadeDrive(dir.getX(), dir.getY());
+            }else{
+                //turnController.setSetpoint(gyroXY.pidGet());
+                //turnController.disable();
+                drive.stopMotor();
+            }
 
-                //SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
-                //SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
+            for(int i = 0; i < 8; i++){
+                // Map solenoids 1-8 to buttons 2-9
+                jsRight.getRawButton(i + 2);
+            }
+        }
+
+        log();
+    }
+
+    private void log(){
+        SmartDashboard.log(ds.getBatteryVoltage(), "Battery Voltage");
+        SmartDashboard.log(ds.getLocation(), "Field Pos");
+        SmartDashboard.log(ds.getAlliance() == DriverStation.Alliance.kRed ? "Red" : "Blue", "Alliance");
+
+        if(kUseCAN && (period++ % 20 == 0)){ // Don't overload the CAN network
+            try {
+                SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
+                SmartDashboard.log(cjagLeft.getPosition(), "Jag L Pos");
+                SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
                 SmartDashboard.log(cjagLeft.getOutputCurrent(), "Jag L Iout");
                 SmartDashboard.log(cjagLeftD.getOutputCurrent(), "Jag LD Iout");
-                //SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
-                //SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
-                SmartDashboard.log(cjagRightD.getOutputCurrent(), "Jag RD Iout");
+
+                SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
+                SmartDashboard.log(cjagRight.getPosition(), "Jag R Pos");
+                SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
                 SmartDashboard.log(cjagRight.getOutputCurrent(), "Jag R Iout");
+                SmartDashboard.log(cjagRightD.getOutputCurrent(), "Jag RD Iout");
+                SmartDashboard.log(false, "CAN Error");
 
             } catch (CANTimeoutException ex) {
                 ex.printStackTrace();
                 SmartDashboard.log(529, "Jag L Speed");
                 SmartDashboard.log(529, "Jag L Vout");
                 SmartDashboard.log(529, "Jag L Iout");
+
                 SmartDashboard.log(529, "Jag R Speed");
                 SmartDashboard.log(529, "Jag R Vout");
                 SmartDashboard.log(529, "Jag R Iout");
-                System.out.println("CAN Error");
+                SmartDashboard.log(true, "CAN Error");
             }
         }else if(!kUseCAN){
             SmartDashboard.log(encLeft.getDistance(), "Enc L Dist");
             SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
+            
             SmartDashboard.log(encRight.getDistance(), "Enc R Dist");
             SmartDashboard.log(encRight.getRate(), "Enc R Speed");
         }
-        
+
         SmartDashboard.log(gyroXY.getAngle(), "Gyro");
         SmartDashboard.log(therm.getTemperature(), "Temp (C)");
-        //SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
-        //SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
-        //SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
+
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
+        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
+
         SmartDashboard.log(lineLeft.get(), "Line L");
         SmartDashboard.log(lineMid.get(), "Line M");
         SmartDashboard.log(lineRight.get(), "Line R");
-        //SmartDashboard.log(kSpeedP, "Speed loop P");
-        ///SmartDashboard.log(kSpeedI, "Speed loop I");
-        //SmartDashboard.log(kSpeedD, "Speed loop D");
+
+        SmartDashboard.log(transducer.get(), "Pressure");
+
+        SmartDashboard.log(kSpeedP, "Speed loop P");
+        SmartDashboard.log(kSpeedI, "Speed loop I");
+        SmartDashboard.log(kSpeedD, "Speed loop D");
+
+        if(kUsePositionTracker){
+            SmartDashboard.log(posTrack.getX(), "Pos X");
+            SmartDashboard.log(posTrack.getY(), "Pos Y");
+            SmartDashboard.log(posTrack.getTheta() / Math.PI * 180, "Pos Angle");
+        }
     }
 
 
