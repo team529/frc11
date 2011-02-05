@@ -16,6 +16,10 @@ import edu.wpi.first.wpilibj.SpeedController;
     public CustomRobotDrive(SpeedController leftMotor, SpeedController rightMotor) {
         super(leftMotor, rightMotor);
     }
+    public CustomRobotDrive(SpeedController frontLeftMotor, SpeedController rearLeftMotor,
+            SpeedController frontRightMotor, SpeedController rearRightMotor){
+        super(frontLeftMotor, rearLeftMotor, frontRightMotor, rearRightMotor);
+    }
     
     /**
      * Arcade drive implements single stick driving.

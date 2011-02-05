@@ -47,8 +47,8 @@ public class Robot extends IterativeRobot {
     private Jaguar jagRightD;
     
 
-    private PIDSpeedController motorLeft;
-    private PIDSpeedController motorRight;
+    //private PIDSpeedController motorLeft;
+    //private PIDSpeedController motorRight;
 
     private CustomRobotDrive drive;
     private RobotArm arm;
@@ -86,15 +86,15 @@ public class Robot extends IterativeRobot {
     private static final boolean kUseDualMotors = true;
     // Use CAN jags? (Encoders / lim switches read over CAN too)
     private static final boolean kUseCAN = true;
-    // Use PID onboard jags. Illegal. 
+    // Use PID onboard jags. TODO: Tune
     private static final boolean kUseOnboardPid = false;
-    // Use PID calc on cRIO to control speed, instead of voltage
-    private static final boolean kUsePidSpeed = false;
-    // Use gyro to use relative controls
+    // Use PID calc on cRIO to ctrl speed, using PIDSpCtrl. Removed.
+    private static final boolean kUsePidSpeed = kUseOnboardPid;
+    // Use gyro to use relative controls. TODO: Test craziness
     private static final boolean kUseGyro = false;
-    // Use absolute position tracking
+    // Use absolute position tracking. TODO: Test accuracy/precision
     private static final boolean kUsePositionTracker = false;
-    // Use position control for arm
+    // Use position control for arm. TODO: Tune
     private static final boolean kUseArmPosition = false;
 
     //
@@ -169,11 +169,15 @@ public class Robot extends IterativeRobot {
                     canJaguarInit(cjagLeftD);
                     canJaguarInit(cjagRightD);
 
-                    motorLeft = new PIDSpeedController(cjagLeft, cjagLeftD);
-                    motorRight = new PIDSpeedController(cjagRight, cjagRightD);
+                    //motorLeft = new PIDSpeedController(cjagLeft, cjagLeftD);
+                    //motorRight = new PIDSpeedController(cjagRight, cjagRightD);
+
+                    drive = new CustomRobotDrive(cjagLeft, cjagLeftD, cjagRight, cjagRightD);
                 }else{
-                    motorLeft = new PIDSpeedController(cjagLeft);
-                    motorRight = new PIDSpeedController(cjagRight);
+                    //motorLeft = new PIDSpeedController(cjagLeft);
+                    //motorRight = new PIDSpeedController(cjagRight);
+
+                    drive = new CustomRobotDrive(cjagLeft, cjagLeftD);
                 }
 
                 cjagArm = new CANJaguar(20);
@@ -199,18 +203,22 @@ public class Robot extends IterativeRobot {
                 jagLeftD = new Jaguar(kSlotDigital, 3);
                 jagRightD = new Jaguar(kSlotDigital, 4);
 
-                motorLeft = new PIDSpeedController(jagLeft, jagLeftD, encLeft);
-                motorRight = new PIDSpeedController(jagRight, jagRightD, encRight);
+                //motorLeft = new PIDSpeedController(jagLeft, jagLeftD, encLeft);
+                //motorRight = new PIDSpeedController(jagRight, jagRightD, encRight);
+                
+                drive = new CustomRobotDrive(jagLeft, jagLeftD, jagRight, jagRightD);
             }else{
-                motorLeft = new PIDSpeedController(jagLeft, encLeft);
-                motorRight = new PIDSpeedController(jagRight, encRight);
+                //motorLeft = new PIDSpeedController(jagLeft, encLeft);
+                //motorRight = new PIDSpeedController(jagRight, encRight);
+
+                drive = new CustomRobotDrive(jagLeft, jagLeftD);
             }
 
             //jagArm = new Jaguar(kSlotDigital, 5);
             //jagArmD = new Jaguar(kSlotDigital, 6);
         }
 
-        drive = new CustomRobotDrive(motorLeft, motorRight);
+        //drive = new CustomRobotDrive(motorLeft, motorRight);
 
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontLeft, false);
         //drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, true);
@@ -219,14 +227,18 @@ public class Robot extends IterativeRobot {
         
         if(kUsePidSpeed){
             drive.setMaxOutput(kMaxSpeed);
+            /*
             motorLeft.enablePID();
             motorRight.enablePID();
             motorLeft.setPID(kSpeedP, kSpeedI, kSpeedD);
             motorRight.setPID(kSpeedP, kSpeedI, kSpeedD);
+             */
         }else{
             drive.setMaxOutput(1.0);
+            /*
             motorLeft.disablePID();
             motorRight.disablePID();
+             */
         }
 
         ds = DriverStation.getInstance();
@@ -362,6 +374,41 @@ public class Robot extends IterativeRobot {
             if(kUseCAN){
                 arm.set(jsRight.getY());
             }
+
+            // tune PID
+            if(period % 10 == 0){
+                /*
+                 * Tuning PID:
+                 * I = 0; D = 0
+                 * P++ until oscilations occur
+                 * P = P / 2
+                 * I++ until change is quick enough
+                 * D++ to compensate for load
+                 *
+                 * Increasing each parameter:
+                 *      Rise T  Overshoot   Settle T    StdySt
+                 * P:
+                 *
+                 */
+                try {
+                    double f = jsLeft.getThrottle() * jsRight.getThrottle();
+                    SmartDashboard.log(f, "PID Adj");
+                    
+                    cjagLeft.setPID(f, 0, 0);
+                    cjagLeftD.setPID(f, 0, 0);
+                    cjagRight.setPID(f, 0, 0);
+                    cjagRightD.setPID(f, 0, 0);
+                    /*
+                    arm.m_leftJag.setPID(f, 0, 0);
+                    arm.m_rightJag.setPID(f, 0, 0);
+                     *
+                     */
+                    //motorRight.setPID(f, 0, 0);
+                    //motorRight.setPID(f, 0, 0);
+                } catch (CANTimeoutException ex) {
+                    ex.printStackTrace();
+                }
+            }
         }
 
         log();
@@ -370,7 +417,8 @@ public class Robot extends IterativeRobot {
     private void log(){
         SmartDashboard.log(ds.getBatteryVoltage(), "Battery Voltage");
         SmartDashboard.log(ds.getLocation(), "Field Pos");
-        SmartDashboard.log(ds.getAlliance() == DriverStation.Alliance.kRed ? "Red" : "Blue", "Alliance");
+        SmartDashboard.log(ds.getAlliance() == DriverStation.Alliance.kRed ? "Red" : "Blue",
+                           "Alliance");
 
         if(kUseCAN && (period++ % 20 == 0)){ // Don't overload the CAN network
             try {

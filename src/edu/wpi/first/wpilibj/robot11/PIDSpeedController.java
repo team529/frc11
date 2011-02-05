@@ -120,7 +120,8 @@ public class PIDSpeedController implements PIDOutput, ISensor, SpeedController{
     }
 
     private void initPID(){
-        //m_pid = new PIDController(kDefaultP, kDefaultI, kDefaultD, m_speedSource, m_speedOutput);
+        //m_pid = new PIDController(kDefaultP, kDefaultI, kDefaultD,
+        //                          m_speedSource, m_speedOutput);
         //m_pid.setInputRange(-m_speedRange, m_speedRange);
     }
 
@@ -192,7 +193,9 @@ public class PIDSpeedController implements PIDOutput, ISensor, SpeedController{
 
     public void setPID(double p, double i, double d){
         //m_pid.setPID(p, i, d);
+
     }
+
 
     public void enablePID(){
         m_pidEnabled = true;
