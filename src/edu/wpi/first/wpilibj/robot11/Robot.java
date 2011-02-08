@@ -13,6 +13,7 @@ import edu.wpi.first.wpilibj.CANJaguar;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.DigitalInput;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStationEnhancedIO;
 import edu.wpi.first.wpilibj.Encoder;
@@ -67,6 +68,7 @@ public class Robot extends IterativeRobot {
 
     private Compressor compressor;
     private Solenoid[] solenoids;
+    private DoubleSolenoid[] dblSolenoids;
     private PressureTransducer transducer;
 
     private ADXL345_I2C accel;
@@ -98,15 +100,16 @@ public class Robot extends IterativeRobot {
     private static final boolean kUseArmPosition = false;
 
     //
-    private static final int kEncCodesPerRev = 250;       // rev
-    private static final double kEncDistPerPulse = 250;   // [dist]
+    private static final int kEncCodesPerRev = 360;       // rev
+    private static final double kEncDistPerPulse = 360;   // [dist]
     private static final double kGyroSensitivity = 0.05;  // V/(rad/s)
 
     // PID parameters for speed control
     //TODO: Tune & set as final
-    private static double kSpeedP = 0.08;
-    private static double kSpeedI = 0.000001;
-    private static double kSpeedD = 0.005;
+    private static final double kSpeedPIDInvert = 1; // +/-1
+    private static double kSpeedP = 0.1 * kSpeedPIDInvert;
+    private static double kSpeedI = 0.001 * kSpeedPIDInvert;
+    private static double kSpeedD = 0.005 * kSpeedPIDInvert;
 
     // Test dark line on white carpet
     private static final boolean kInvertLineSensor = false;
@@ -192,13 +195,6 @@ public class Robot extends IterativeRobot {
             jagLeft = new Jaguar(kSlotDigital, 1);
             jagRight = new Jaguar(kSlotDigital, 2);
 
-            encLeft = new Encoder(kSlotDigital, 1, 2);
-            encRight = new Encoder(kSlotDigital, 3, 4);
-            encLeft.setDistancePerPulse(kEncDistPerPulse);
-            encRight.setDistancePerPulse(kEncDistPerPulse);
-            encLeft.reset();
-            encRight.reset();
-
             if(kUseDualMotors){
                 jagLeftD = new Jaguar(kSlotDigital, 3);
                 jagRightD = new Jaguar(kSlotDigital, 4);
@@ -221,9 +217,9 @@ public class Robot extends IterativeRobot {
         //drive = new CustomRobotDrive(motorLeft, motorRight);
 
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontLeft, false);
-        //drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, true);
-        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, true);
-        //drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearRight, false);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, true);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, false);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearRight, true);
         
         if(kUsePidSpeed){
             drive.setMaxOutput(kMaxSpeed);
@@ -255,13 +251,22 @@ public class Robot extends IterativeRobot {
 
         // Pressure Switch: 14; Compressor Relay: 1
         compressor = new Compressor(kSlotDigital, 14, kSlotDigital, 1);
+        compressor.start();
         solenoids = new Solenoid[8];
         for(int i = 0; i < 8; i++){
             solenoids[i] = new Solenoid(kSlotPneumatic, i+1);
         }
 
         transducer = new PressureTransducer(kSlotAnalog, 3);
+/*
 
+        encLeft = new Encoder(kSlotDigital, 1, 2);
+        encRight = new Encoder(kSlotDigital, 3, 4);
+        encLeft.setDistancePerPulse(kEncDistPerPulse);
+        encRight.setDistancePerPulse(kEncDistPerPulse);
+        encLeft.reset();
+        encRight.reset();
+*/
         accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
         therm = new Thermometer(kSlotAnalog, 2);
         gyroXY = new Gyro(kSlotAnalog, 1);
@@ -344,7 +349,7 @@ public class Robot extends IterativeRobot {
             posTrack.update();
         }
 
-        if(ds.isNewControlData()){
+        if(true || ds.isNewControlData()){
             Vector dir = new Vector();
             dir.setX(jsLeft.getX());
             dir.setY(jsLeft.getY());
@@ -356,27 +361,28 @@ public class Robot extends IterativeRobot {
             }
             //System.out.println("Gyro" + gyroXY.getAngle());
             if(dir.getR2() > kDeadband){
-                drive.arcadeDrive(dir.getX(), dir.getY());
+                drive.arcadeDrive(dir.getX(), dir.getY(), true, jsLeft.getTrigger());
             }else{
                 //turnController.setSetpoint(gyroXY.pidGet());
-                //turnController.disable();
+                //turnController.disable() ;
                 drive.stopMotor();
             }
 
             for(int i = 0; i < 8; i++){
                 // Map solenoids 1-8 to buttons 2-9
-                jsRight.getRawButton(i + 2);
+                solenoids[i].set(jsLeft.getRawButton(i + 2));
             }
+
 
             //jagArm.set(jsRight.getY(), syncGroup);
             //jagArmD.set(jsRight.getY(), syncGroup);
             //CANJaguar.updateSyncGroup(syncGroup);
             if(kUseCAN){
-                arm.set(jsRight.getY());
+                arm.set(-0.7 * jsRight.getY());
             }
 
             // tune PID
-            if(period % 10 == 0){
+            if(false&& period % 10 == 0){
                 /*
                  * Tuning PID:
                  * I = 0; D = 0

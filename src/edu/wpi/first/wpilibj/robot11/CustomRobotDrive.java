@@ -20,15 +20,19 @@ import edu.wpi.first.wpilibj.SpeedController;
             SpeedController frontRightMotor, SpeedController rearRightMotor){
         super(frontLeftMotor, rearLeftMotor, frontRightMotor, rearRightMotor);
     }
-    
+
+    public void arcadeDrive(double moveValue, double rotateValue, boolean squaredInputs){
+        arcadeDrive(moveValue, rotateValue, squaredInputs, false);
+    }
     /**
      * Arcade drive implements single stick driving.
      * This function lets you directly provide joystick values from any source.
      * @param moveValue The value to use for forwards/backwards
      * @param rotateValue The value to use for the rotate right/left
      * @param squaredInputs If set, increases the sensitivity at low speeds
+     * @param orthagonal If set, the robot will only pivot OR move straight.
      */
-    public void arcadeDrive(double moveValue, double rotateValue, boolean squaredInputs) {
+    public void arcadeDrive(double moveValue, double rotateValue, boolean squaredInputs, boolean orthagonal) {
         // local variables to hold the computed PWM values for the motors
         double leftMotorSpeed;
         double rightMotorSpeed;
@@ -37,9 +41,7 @@ import edu.wpi.first.wpilibj.SpeedController;
         moveValue = limit(moveValue);
         rotateValue = limit(rotateValue);
 
-        if(false){ // Use alternate algorithm
-            rotateValue *= moveValue;
-        }
+        
 
         if (squaredInputs) {
             // square the inputs (while preserving the sign) to increase fine control while permitting full power
@@ -55,21 +57,34 @@ import edu.wpi.first.wpilibj.SpeedController;
             }
         }
 
-        if (moveValue > 0.0) {
-            if (rotateValue > 0.0) {
-                leftMotorSpeed = moveValue - rotateValue;
-                rightMotorSpeed = Math.max(moveValue, rotateValue);
-            } else {
-                leftMotorSpeed = Math.max(moveValue, -rotateValue);
-                rightMotorSpeed = moveValue + rotateValue;
+        if(orthagonal){
+            if(moveValue > rotateValue){
+                // Drive straight
+                leftMotorSpeed = rightMotorSpeed = moveValue;
+            }else{
+                leftMotorSpeed = -rotateValue;
+                rightMotorSpeed = rotateValue;
             }
-        } else {
-            if (rotateValue > 0.0) {
-                leftMotorSpeed = -Math.max(-moveValue, rotateValue);
-                rightMotorSpeed = moveValue + rotateValue;
+        }else{
+            if(false){ // Use alternate algorithm
+                rotateValue *= moveValue;
+            }
+            if (moveValue > 0.0) {
+                if (rotateValue > 0.0) {
+                    leftMotorSpeed = moveValue - rotateValue;
+                    rightMotorSpeed = Math.max(moveValue, rotateValue);
+                } else {
+                    leftMotorSpeed = Math.max(moveValue, -rotateValue);
+                    rightMotorSpeed = moveValue + rotateValue;
+                }
             } else {
-                leftMotorSpeed = moveValue - rotateValue;
-                rightMotorSpeed = -Math.max(-moveValue, -rotateValue);
+                if (rotateValue > 0.0) {
+                    leftMotorSpeed = -Math.max(-moveValue, rotateValue);
+                    rightMotorSpeed = moveValue + rotateValue;
+                } else {
+                    leftMotorSpeed = moveValue - rotateValue;
+                    rightMotorSpeed = -Math.max(-moveValue, -rotateValue);
+                }
             }
         }
 
