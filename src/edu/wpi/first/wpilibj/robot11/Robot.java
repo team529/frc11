@@ -104,6 +104,7 @@ public class Robot extends IterativeRobot {
     private static final double kEncDistPerPulse = 360;   // [dist]
     private static final double kGyroSensitivity = 0.05;  // V/(rad/s)
 
+
     // PID parameters for speed control
     //TODO: Tune & set as final
     private static final double kSpeedPIDInvert = 1; // +/-1
@@ -136,6 +137,14 @@ public class Robot extends IterativeRobot {
     private static final double kInitialTheta = Math.PI / 2;
 
 
+    // Solenoid mapping for each button on joystick
+    // 1-8. Positive enable, Negative disable. 0 for none
+    // 1st array is driver stick. 2nd is arm operator
+    private static int kSolenoidMapping[][] = {
+    //   00  01  02  03  04  05  06  07  08  09  10  11
+        {0,  0,  1, -1,  2, -2,  0,  0,  0,  0,  0,  0},
+        {0,  1,  1, -1,  2, -2,  3, -3,  4, -4,  5, -5},
+    };
 
 
     private static final byte syncGroup = 0x40;
@@ -258,15 +267,14 @@ public class Robot extends IterativeRobot {
         }
 
         transducer = new PressureTransducer(kSlotAnalog, 3);
-/*
 
-        encLeft = new Encoder(kSlotDigital, 1, 2);
-        encRight = new Encoder(kSlotDigital, 3, 4);
+        encLeft = new Encoder(kSlotDigital, 10, 11);
+        encRight = new Encoder(kSlotDigital, 12, 13);
         encLeft.setDistancePerPulse(kEncDistPerPulse);
         encRight.setDistancePerPulse(kEncDistPerPulse);
         encLeft.reset();
         encRight.reset();
-*/
+
         accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
         therm = new Thermometer(kSlotAnalog, 2);
         gyroXY = new Gyro(kSlotAnalog, 1);
@@ -277,7 +285,7 @@ public class Robot extends IterativeRobot {
 
 
         if(kUsePositionTracker){
-            if(kUseCAN){
+            if(false && kUseCAN){
                 posTrack = new PositionTracker(cjagLeft, cjagRight);
             }else{
                 posTrack = new PositionTracker(encLeft, encRight);
@@ -367,10 +375,32 @@ public class Robot extends IterativeRobot {
                 //turnController.disable() ;
                 drive.stopMotor();
             }
+      
+            for(int i = 1; i <= 11; i++){
+                // Use kSolenoidMapping to map joysticks to solenoids
+                int sol;
+                if(jsLeft.getRawButton(i)){
+                    sol = kSolenoidMapping[0][i];
+                    if(sol < 0){
+                        solenoids[-sol].set(false);
+                    }else if(sol > 0){
+                        solenoids[sol].set(true);
+                    }
+                }
 
-            for(int i = 0; i < 8; i++){
-                // Map solenoids 1-8 to buttons 2-9
+                if(jsRight.getRawButton(i)){
+                    sol = kSolenoidMapping[1][i];
+                    if(sol < 0){
+                        solenoids[-sol].set(false);
+                    }else if(sol > 0){
+                        solenoids[sol].set(true);
+                    }
+                }
+
+                /* Old method
                 solenoids[i].set(jsLeft.getRawButton(i + 2));
+                 * 
+                 */
             }
 
 
@@ -378,11 +408,11 @@ public class Robot extends IterativeRobot {
             //jagArmD.set(jsRight.getY(), syncGroup);
             //CANJaguar.updateSyncGroup(syncGroup);
             if(kUseCAN){
-                arm.set(-0.7 * jsRight.getY());
+                arm.set(-1.0 * jsRight.getY());
             }
 
-            // tune PID
-            if(false&& period % 10 == 0){
+            // tune PID... TODO
+            if(false && period % 10 == 0){
                 /*
                  * Tuning PID:
                  * I = 0; D = 0
@@ -452,7 +482,9 @@ public class Robot extends IterativeRobot {
                 SmartDashboard.log(529, "Jag R Iout");
                 SmartDashboard.log(true, "CAN Error");
             }
-        }else if(!kUseCAN){
+        //}else if(!kUseCAN){
+        }
+        if(true){
             SmartDashboard.log(encLeft.getDistance(), "Enc L Dist");
             SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
             
@@ -471,7 +503,7 @@ public class Robot extends IterativeRobot {
         SmartDashboard.log(lineMid.get(), "Line M");
         SmartDashboard.log(lineRight.get(), "Line R");
 
-        SmartDashboard.log(transducer.get(), "Pressure");
+        SmartDashboard.log(transducer.getPSI(), "Pressure (PSI)");
 
         SmartDashboard.log(kSpeedP, "Speed loop P");
         SmartDashboard.log(kSpeedI, "Speed loop I");
