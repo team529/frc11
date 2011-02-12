@@ -58,7 +58,7 @@ import edu.wpi.first.wpilibj.SpeedController;
         }
 
         if(orthagonal){
-            if(moveValue > rotateValue){
+            if(Math.abs(moveValue) > Math.abs(rotateValue)){
                 // Drive straight
                 leftMotorSpeed = rightMotorSpeed = moveValue;
             }else{

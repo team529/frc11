@@ -21,6 +21,7 @@ import edu.wpi.first.wpilibj.Gyro;
 import edu.wpi.first.wpilibj.Jaguar;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.PIDController;
+import edu.wpi.first.wpilibj.PIDOutput;
 import edu.wpi.first.wpilibj.SmartDashboard;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.can.CANTimeoutException;
@@ -89,33 +90,33 @@ public class Robot extends IterativeRobot {
     // Use CAN jags? (Encoders / lim switches read over CAN too)
     private static final boolean kUseCAN = true;
     // Use PID onboard jags. TODO: Tune
-    private static final boolean kUseOnboardPid = false;
+    private static final boolean kUseOnboardPid = true;
     // Use PID calc on cRIO to ctrl speed, using PIDSpCtrl. Removed.
     private static final boolean kUsePidSpeed = kUseOnboardPid;
     // Use gyro to use relative controls. TODO: Test craziness
     private static final boolean kUseGyro = false;
     // Use absolute position tracking. TODO: Test accuracy/precision
-    private static final boolean kUsePositionTracker = false;
+    private static final boolean kUsePositionTracker = true;
     // Use position control for arm. TODO: Tune
     private static final boolean kUseArmPosition = false;
 
     //
     private static final int kEncCodesPerRev = 360;       // rev
     private static final double kEncDistPerPulse = 360;   // [dist]
-    private static final double kGyroSensitivity = 0.05;  // V/(rad/s)
+    private static final double kGyroSensitivity = 0.005;  // V/(rad/s)
 
 
     // PID parameters for speed control
     //TODO: Tune & set as final
     private static final double kSpeedPIDInvert = 1; // +/-1
     private static double kSpeedP = 0.1 * kSpeedPIDInvert;
-    private static double kSpeedI = 0.001 * kSpeedPIDInvert;
-    private static double kSpeedD = 0.005 * kSpeedPIDInvert;
+    private static double kSpeedI = 0.000 * kSpeedPIDInvert;
+    private static double kSpeedD = 0.000 * kSpeedPIDInvert;
 
     // Test dark line on white carpet
     private static final boolean kInvertLineSensor = false;
     // Sqrt of deadbad value for joystick
-    private static final double kDeadband = 0.2;
+    private static final double kDeadband = 0.1;
     // Maximum speed. Will autoadjust using PIDSpCtrl
     private static final double kMaxSpeed = 1000; // kEncCodesPerRev / min
     // Autonomous speed as %
@@ -173,13 +174,17 @@ public class Robot extends IterativeRobot {
 
                 canJaguarInit(cjagLeft);
                 canJaguarInit(cjagRight);
+                //cjagLeft.configEncoderCodesPerRev(250);
+
 
                 if(kUseDualMotors){
                     cjagLeftD = new CANJaguar(12);
                     cjagRightD = new CANJaguar(13);
+                    
 
                     canJaguarInit(cjagLeftD);
                     canJaguarInit(cjagRightD);
+                    //cjagLeftD.configEncoderCodesPerRev(250);
 
                     //motorLeft = new PIDSpeedController(cjagLeft, cjagLeftD);
                     //motorRight = new PIDSpeedController(cjagRight, cjagRightD);
@@ -192,10 +197,10 @@ public class Robot extends IterativeRobot {
                     drive = new CustomRobotDrive(cjagLeft, cjagLeftD);
                 }
 
-                cjagArm = new CANJaguar(20);
-                cjagArmD = new CANJaguar(21);
+                //cjagArm = new CANJaguar(20);
+                //cjagArmD = new CANJaguar(21);
 
-                arm = new RobotArm(cjagArm, cjagArmD, kUseArmPosition);
+                //arm = new RobotArm(cjagArm, cjagArmD, kUseArmPosition);
 
             } catch (CANTimeoutException ex) {
                 ex.printStackTrace();
@@ -226,8 +231,8 @@ public class Robot extends IterativeRobot {
         //drive = new CustomRobotDrive(motorLeft, motorRight);
 
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontLeft, false);
-        drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, true);
-        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, false);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, false);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, true);
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearRight, true);
         
         if(kUsePidSpeed){
@@ -254,8 +259,8 @@ public class Robot extends IterativeRobot {
 
         
         lineRight = new DigitalInput(kSlotDigital, 5);
-        lineMid = new DigitalInput(kSlotDigital, 6);
-        lineLeft = new DigitalInput(kSlotDigital, 7);
+        lineMid = new DigitalInput(kSlotDigital, 7);
+        lineLeft = new DigitalInput(kSlotDigital, 6);
 
 
         // Pressure Switch: 14; Compressor Relay: 1
@@ -268,8 +273,8 @@ public class Robot extends IterativeRobot {
 
         transducer = new PressureTransducer(kSlotAnalog, 3);
 
-        encLeft = new Encoder(kSlotDigital, 10, 11);
-        encRight = new Encoder(kSlotDigital, 12, 13);
+        encLeft = new Encoder(kSlotDigital, 8, kSlotDigital, 9);
+        encRight = new Encoder(kSlotDigital, 11, kSlotDigital, 12);
         encLeft.setDistancePerPulse(kEncDistPerPulse);
         encRight.setDistancePerPulse(kEncDistPerPulse);
         encLeft.reset();
@@ -298,16 +303,15 @@ public class Robot extends IterativeRobot {
             posTrack.setTheta(kInitialTheta);
         }
         
-
-/*        turnControllerd = new PIDController(0.08, 0.0, 0.30, gyroXY, new PIDOutput() {
+        turnController = new PIDController(0.08, 0.0, 0.20, gyroXY, new PIDOutput() {
             public void pidWrite(double output) {
                 drive.arcadeDrive(0, output);
             }
-        }, .005);*/
-        //turnController.setInputRange(-360.0, 360.0);
-        //turnController.setTolerance(1 / 90. * 100);
-        //turnController.setContinuous(true);
-        //turnController.disable();
+        }, .005);
+        turnController.setInputRange(-360.0, 360.0);
+        turnController.setTolerance(1 / 90. * 100);
+        turnController.setContinuous(true);
+        turnController.disable();
 
         
 
@@ -316,6 +320,7 @@ public class Robot extends IterativeRobot {
     
     public void disabledInit(){
         //turnController.disable();
+        turnController.disable();
     }
 
     public void disabledPeriodic(){
@@ -329,6 +334,7 @@ public class Robot extends IterativeRobot {
 
     public void autonomousInit(){
         //turnController.disable();
+        turnController.disable();
     }
 
     public void autonomousPeriodic() {
@@ -336,12 +342,14 @@ public class Robot extends IterativeRobot {
             posTrack.update();
         }
 
-        if(lineLeft.get() ^ kInvertLineSensor){
-            drive.drive(kAutoSpeed, -kAutoCurve);
+        if(lineMid.get() ^ kInvertLineSensor){
+            drive.drive(kAutoSpeed, 0.0);
         }else if(lineRight.get() ^ kInvertLineSensor){
             drive.drive(kAutoSpeed, -kAutoCurve);
+        }else if(lineLeft.get() ^ kInvertLineSensor){
+            drive.drive(kAutoSpeed, kAutoCurve);
         }else{
-            drive.drive(kAutoSpeed, 0.0);
+            drive.drive(0.0, 0.0);
         }
 
         log();
@@ -350,9 +358,11 @@ public class Robot extends IterativeRobot {
     public void teleopInit(){
         //turnController.setSetpoint(gyroXY.pidGet());
         //turnController.enable();
+        turnController.disable();
     }
     
     public void teleopPeriodic() {
+        double angle = gyroXY.getAngle();
         if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
             posTrack.update();
         }
@@ -364,17 +374,34 @@ public class Robot extends IterativeRobot {
 
             if(kUseGyro){
                 dir.normalize();
-                dir.rotate(gyroXY.getAngle());
+                dir.rotate(angle);
                 dir.unormalize();
             }
             //System.out.println("Gyro" + gyroXY.getAngle());
-            if(dir.getR2() > kDeadband){
-                drive.arcadeDrive(dir.getX(), dir.getY(), true, jsLeft.getTrigger());
+
+            if(turnController.isEnable()){
+                if(turnController.onTarget() || jsLeft.getTrigger()){
+                    turnController.disable();
+                }
             }else{
-                //turnController.setSetpoint(gyroXY.pidGet());
-                //turnController.disable() ;
-                drive.stopMotor();
+                if(dir.getR2() > kDeadband){
+                    drive.arcadeDrive(dir.getX(), dir.getY(), true, jsLeft.getTrigger());
+                }else{
+                    //turnController.setSetpoint(gyroXY.pidGet());
+                    //turnController.disable() ;
+                    drive.stopMotor();
+                }
+
+                if(jsLeft.getRawButton(8)){
+                    turnController.setSetpoint(angle - (angle % 90) );
+                    turnController.enable();
+                }else if(jsLeft.getRawButton(9)){
+                    turnController.setSetpoint(angle - (angle % 90) + 90);
+                    turnController.enable();
+                }
             }
+
+            
       
             for(int i = 1; i <= 11; i++){
                 // Use kSolenoidMapping to map joysticks to solenoids
@@ -408,11 +435,11 @@ public class Robot extends IterativeRobot {
             //jagArmD.set(jsRight.getY(), syncGroup);
             //CANJaguar.updateSyncGroup(syncGroup);
             if(kUseCAN){
-                arm.set(-1.0 * jsRight.getY());
+                //arm.set(-1.0 * jsRight.getY());
             }
 
             // tune PID... TODO
-            if(false && period % 10 == 0){
+            if((period % 10) == 0){
                 /*
                  * Tuning PID:
                  * I = 0; D = 0
@@ -427,13 +454,13 @@ public class Robot extends IterativeRobot {
                  *
                  */
                 try {
-                    double f = jsLeft.getThrottle() * jsRight.getThrottle();
+                    double f = jsLeft.getZ() * jsRight.getZ() * 0.1;
                     SmartDashboard.log(f, "PID Adj");
                     
-                    cjagLeft.setPID(f, 0, 0);
-                    cjagLeftD.setPID(f, 0, 0);
-                    cjagRight.setPID(f, 0, 0);
-                    cjagRightD.setPID(f, 0, 0);
+                    cjagLeft.setPID(0.15, 0.002, f);
+                    cjagLeftD.setPID(0.15, 0.002, f);
+                    cjagRight.setPID(0.15, 0.002, f);
+                    cjagRightD.setPID(0.15, 0, 0);
                     /*
                     arm.m_leftJag.setPID(f, 0, 0);
                     arm.m_rightJag.setPID(f, 0, 0);
@@ -456,7 +483,7 @@ public class Robot extends IterativeRobot {
         SmartDashboard.log(ds.getAlliance() == DriverStation.Alliance.kRed ? "Red" : "Blue",
                            "Alliance");
 
-        if(kUseCAN && (period++ % 20 == 0)){ // Don't overload the CAN network
+        if(kUseCAN && (period++ % 5 == 0)){ // Don't overload the CAN network
             try {
                 SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
                 SmartDashboard.log(cjagLeft.getPosition(), "Jag L Pos");
