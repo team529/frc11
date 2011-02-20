@@ -123,11 +123,12 @@ public class RobotArm {
 
     private boolean kUsePositionControl = false;
 
-    private static final int kEncCodesPerRev = 100;
-    private static final double kPosPIDInvert = 1; // +/- 1
-    private static final double kPosP = 0.900 * kPosPIDInvert;
-    private static final double kPosI = 0.001 * kPosPIDInvert;
-    private static final double kPosD = 0.005 * kPosPIDInvert;
+    private static final double kArmScale = 100;
+    private static final int kEncCodesPerRev = 40;
+    private static final double kPosPIDInvert = -1; // +/- 1
+    private static final double kPosP = 0.300 * kPosPIDInvert;
+    private static final double kPosI = 0.003 * kPosPIDInvert;
+    private static final double kPosD = 0.050 * kPosPIDInvert;
 
     private static final byte syncGroup = 0x20;
 
@@ -159,7 +160,7 @@ public class RobotArm {
         }
         m_target = lazyT;
         if(kUsePositionControl){
-            set(height);
+            setRaw(height);
         }
         return false;
     }
@@ -174,14 +175,30 @@ public class RobotArm {
     }
     public void set(double v){
         try {
-            m_leftJag.set(v, syncGroup);
-            m_rightJag.set(v, syncGroup);
+            m_leftJag.setX(v * kArmScale, syncGroup);
+            m_rightJag.setX(v * kArmScale, syncGroup);
             CANJaguar.updateSyncGroup(syncGroup);
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
         }
     }
+    public double get(){
+        try {
+            return m_leftJag.getPosition();
+        } catch (CANTimeoutException ex) {
+            ex.printStackTrace();
+            return 0;
+        }
+    }
+    public double getSetpoint(){
+        try {
+            return m_leftJag.getX();
+        } catch (CANTimeoutException ex) {
+            ex.printStackTrace();
+            return 0;
+        }
 
+    }
 
     private void configureCAN(CANJaguar cjag){
         try {
@@ -189,7 +206,10 @@ public class RobotArm {
                 cjag.changeControlMode(CANJaguar.ControlMode.kPosition);
                 cjag.setPositionReference(CANJaguar.PositionReference.kQuadEncoder);
                 cjag.configEncoderCodesPerRev(kEncCodesPerRev);
+                //cjag.configMaxOutputVoltage(10);
+                //cjag.setVoltageRampRate(1.0);
                 cjag.setPID(kPosP, kPosI, kPosD);
+
             } else {
                 cjag.changeControlMode(CANJaguar.ControlMode.kPercentVbus);
             }

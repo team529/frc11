@@ -88,21 +88,21 @@ public class Robot extends IterativeRobot {
     // Use two motors per transmission?
     private static final boolean kUseDualMotors = true;
     // Use CAN jags? (Encoders / lim switches read over CAN too)
-    private static final boolean kUseCAN = true;
+    private static boolean kUseCAN = true;
     // Use PID onboard jags. TODO: Tune
     private static final boolean kUseOnboardPid = true;
     // Use PID calc on cRIO to ctrl speed, using PIDSpCtrl. Removed.
     private static final boolean kUsePidSpeed = kUseOnboardPid;
     // Use gyro to use relative controls. TODO: Test craziness
-    private static final boolean kUseGyro = false;
+    private static final boolean kUseGyro = true;
     // Use absolute position tracking. TODO: Test accuracy/precision
     private static final boolean kUsePositionTracker = true;
     // Use position control for arm. TODO: Tune
-    private static final boolean kUseArmPosition = false;
+    private static final boolean kUseArmPosition = true;
 
     //
     private static final int kEncCodesPerRev = 360;       // rev
-    private static final double kEncDistPerPulse = 360;   // [dist]
+    private static final double kEncDistPerPulse = 1 / 360.0 * 8;   // [dist]
     private static final double kGyroSensitivity = 0.005;  // V/(rad/s)
 
 
@@ -135,8 +135,9 @@ public class Robot extends IterativeRobot {
     // Initial position of the robot
     private static final double kInitialX = 0;
     private static final double kInitialY = 0;
-    private static final double kInitialTheta = Math.PI / 2;
+    private static final double kInitialTheta = 0;
 
+    //-2340, 810 60 in -> 298800, 297900
 
     // Solenoid mapping for each button on joystick
     // 1-8. Positive enable, Negative disable. 0 for none
@@ -151,6 +152,9 @@ public class Robot extends IterativeRobot {
     private static final byte syncGroup = 0x40;
     // Track looping period
     private long period;
+    // Autonomous state
+    private int aState;
+
 
     private void canJaguarInit(CANJaguar cjag) throws CANTimeoutException{
         if(kUseOnboardPid){
@@ -166,7 +170,6 @@ public class Robot extends IterativeRobot {
     }
 
     public void robotInit() {
-
         if(kUseCAN){
             try {
                 cjagLeft = new CANJaguar(10);
@@ -197,15 +200,17 @@ public class Robot extends IterativeRobot {
                     drive = new CustomRobotDrive(cjagLeft, cjagLeftD);
                 }
 
-                //cjagArm = new CANJaguar(20);
-                //cjagArmD = new CANJaguar(21);
+                cjagArm = new CANJaguar(20);
+                cjagArmD = new CANJaguar(21);
 
-                //arm = new RobotArm(cjagArm, cjagArmD, kUseArmPosition);
+                arm = new RobotArm(cjagArm, cjagArmD, kUseArmPosition);
 
             } catch (CANTimeoutException ex) {
                 ex.printStackTrace();
+                kUseCAN = false;
             }
-        }else{
+        }
+        if(!kUseCAN){
             jagLeft = new Jaguar(kSlotDigital, 1);
             jagRight = new Jaguar(kSlotDigital, 2);
 
@@ -232,8 +237,8 @@ public class Robot extends IterativeRobot {
 
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontLeft, false);
         drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearLeft, false);
-        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, true);
-        drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearRight, true);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kFrontRight, false);
+        drive.setInvertedMotor(CustomRobotDrive.MotorType.kRearRight, false);
         
         if(kUsePidSpeed){
             drive.setMaxOutput(kMaxSpeed);
@@ -278,7 +283,9 @@ public class Robot extends IterativeRobot {
         encLeft.setDistancePerPulse(kEncDistPerPulse);
         encRight.setDistancePerPulse(kEncDistPerPulse);
         encLeft.reset();
+        encLeft.start();
         encRight.reset();
+        encRight.start();
 
         accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
         therm = new Thermometer(kSlotAnalog, 2);
@@ -303,14 +310,14 @@ public class Robot extends IterativeRobot {
             posTrack.setTheta(kInitialTheta);
         }
         
-        turnController = new PIDController(0.08, 0.0, 0.20, gyroXY, new PIDOutput() {
+        turnController = new PIDController(0.02, 0.001, 0.001, gyroXY, new PIDOutput() {
             public void pidWrite(double output) {
-                drive.arcadeDrive(0, output);
+                drive.arcadeDrive(0, output * 0.5);
             }
         }, .005);
-        turnController.setInputRange(-360.0, 360.0);
-        turnController.setTolerance(1 / 90. * 100);
-        turnController.setContinuous(true);
+        //turnController.setInputRange(-360.0, 360.0);
+        //turnController.setTolerance(1 / 90. * 100);
+        //turnController.setContinuous(true);
         turnController.disable();
 
         
@@ -335,6 +342,7 @@ public class Robot extends IterativeRobot {
     public void autonomousInit(){
         //turnController.disable();
         turnController.disable();
+        aState = 0;
     }
 
     public void autonomousPeriodic() {
@@ -342,14 +350,125 @@ public class Robot extends IterativeRobot {
             posTrack.update();
         }
 
-        if(lineMid.get() ^ kInvertLineSensor){
+        boolean swL, swM, swR;
+        swL = lineLeft.get() ^ kInvertLineSensor;
+        swM = lineMid.get() ^ kInvertLineSensor;
+        swR = lineMid.get() ^ kInvertLineSensor;
+
+        if(swL && swM && swR){
+            // End of line, move tube
+            drive.drive(0, 0);
+            aState = 10;
+        }
+
+        switch(aState){
+            case 0:
+                // Get on line by approx drive straight
+                if(swL || swR || swM){
+                    if(swM)
+                        aState = 1;
+                    else if(swL)
+                        aState = 2;
+                    else if(swR)
+                        aState = 3;
+                    drive.drive(0, 0);
+                }else{
+                    drive.drive(kAutoSpeed, 0);
+                }
+            break;
+            case 1:
+                // Driving straight
+                if(swM){
+                    if(swL && swR){
+                        drive.drive(0, 0);
+                        aState = 10;
+                    }else if(swL){
+                        drive.drive(kAutoSpeed, -kAutoCurve / 2);
+                        aState = 1;
+                    }else if(swR){
+                        drive.drive(kAutoSpeed, kAutoCurve / 2);
+                        aState = 1;
+                    }else{
+                        drive.drive(kAutoSpeed, 0);
+                    }
+                }else{
+                    if(swL){
+                        drive.drive(kAutoSpeed / 2, -kAutoCurve);
+                        aState = 2;
+                    }else if(swR){
+                        drive.drive(kAutoSpeed / 2, kAutoCurve);
+                        aState = 3;
+                    }else{
+                        // Completely lost the line
+                        drive.drive(-kAutoSpeed / 4, 0);
+                        aState = 1;
+                    }
+                }
+
+            break;
+            case 2:
+                // Veering left, -kAutoCurve
+                if(swL){
+                    if(swM){
+                        drive.drive(kAutoSpeed, -kAutoCurve / 2);
+                        aState = 1;
+                    }else{
+                        drive.drive(kAutoSpeed / 2, -kAutoCurve);
+                        aState = 2;
+                    }
+                }else{
+                    if(swM){
+                        drive.drive(kAutoSpeed, 0);
+                        aState = 1;
+                    }else{
+                        drive.drive(kAutoSpeed / 2, -kAutoCurve);
+                        aState = 2;
+                    }
+                }
+            break;
+            case 3:
+                if(swR){
+                    if(swM){
+                        drive.drive(kAutoSpeed, kAutoCurve / 2);
+                        aState = 1;
+                    }else{
+                        drive.drive(kAutoSpeed / 2, kAutoCurve);
+                        aState = 2;
+                    }
+                }else{
+                    if(swM){
+                        drive.drive(kAutoSpeed, 0);
+                        aState = 1;
+                    }else{
+                        drive.drive(kAutoSpeed / 2, kAutoCurve);
+                        aState = 2;
+                    }
+                }
+            break;
+            case 10:
+                arm.setRaw(0.07);
+                try {
+                    wait(200); // Wait 200 ms
+                } catch (InterruptedException ex) {
+                    ex.printStackTrace();
+                }
+            break;
+            default:
+                drive.drive(0, 0);
+            break;
+        }
+        if(lineMid.get() && lineLeft.get() && lineRight.get()){
+            drive.drive(0.0, 0.0);
+        }
+        
+        if (lineMid.get() ^ kInvertLineSensor) {
             drive.drive(kAutoSpeed, 0.0);
         }else if(lineRight.get() ^ kInvertLineSensor){
-            drive.drive(kAutoSpeed, -kAutoCurve);
+            drive.drive(kAutoSpeed * kAutoCurve, kAutoCurve);
         }else if(lineLeft.get() ^ kInvertLineSensor){
-            drive.drive(kAutoSpeed, kAutoCurve);
+            drive.drive(kAutoSpeed * kAutoCurve, -kAutoCurve);
         }else{
-            drive.drive(0.0, 0.0);
+            drive.drive(-0.08, 0.0);
         }
 
         log();
@@ -359,6 +478,12 @@ public class Robot extends IterativeRobot {
         //turnController.setSetpoint(gyroXY.pidGet());
         //turnController.enable();
         turnController.disable();
+
+        arm.set(arm.get());
+        for(int i = 0; i < 8; i++){
+            solenoids[i].set(false);
+        }
+
     }
     
     public void teleopPeriodic() {
@@ -369,10 +494,10 @@ public class Robot extends IterativeRobot {
 
         if(true || ds.isNewControlData()){
             Vector dir = new Vector();
-            dir.setX(jsLeft.getX());
-            dir.setY(jsLeft.getY());
+            dir.setX(-jsLeft.getX());
+            dir.setY(-jsLeft.getY());
 
-            if(kUseGyro){
+            if(kUseGyro && jsLeft.getRawButton(6)){
                 dir.normalize();
                 dir.rotate(angle);
                 dir.unormalize();
@@ -380,12 +505,15 @@ public class Robot extends IterativeRobot {
             //System.out.println("Gyro" + gyroXY.getAngle());
 
             if(turnController.isEnable()){
-                if(turnController.onTarget() || jsLeft.getTrigger()){
+                double err = turnController.getError();
+                SmartDashboard.log(err, "Turn Err");
+                SmartDashboard.log(turnController.get(), "Turn Out");
+                if((err < 3 && turnController.get() < 0.1) || jsLeft.getTrigger()){
                     turnController.disable();
                 }
             }else{
                 if(dir.getR2() > kDeadband){
-                    drive.arcadeDrive(dir.getX(), dir.getY(), true, jsLeft.getTrigger());
+                    drive.arcadeDrive(dir.getY(), dir.getX(), true, jsLeft.getTrigger());
                 }else{
                     //turnController.setSetpoint(gyroXY.pidGet());
                     //turnController.disable() ;
@@ -393,34 +521,34 @@ public class Robot extends IterativeRobot {
                 }
 
                 if(jsLeft.getRawButton(8)){
-                    turnController.setSetpoint(angle - (angle % 90) );
-                    turnController.enable();
-                }else if(jsLeft.getRawButton(9)){
-                    turnController.setSetpoint(angle - (angle % 90) + 90);
-                    turnController.enable();
+                turnController.setSetpoint(angle - (angle % 90) );
+                turnController.enable();
+            }else if(jsLeft.getRawButton(9)){
+                turnController.setSetpoint(angle - (angle % 90) + 90);
+                turnController.enable();
+            }
+        }
+
+
+
+        for(int i = 1; i <= 11; i++){
+            // Use kSolenoidMapping to map joysticks to solenoids
+            int sol;
+            if(jsLeft.getRawButton(i)){
+                sol = kSolenoidMapping[0][i];
+                if(sol < 0){
+                    solenoids[-sol-1].set(false);
+                }else if(sol > 0){
+                    solenoids[sol-1].set(true);
                 }
             }
 
-            
-      
-            for(int i = 1; i <= 11; i++){
-                // Use kSolenoidMapping to map joysticks to solenoids
-                int sol;
-                if(jsLeft.getRawButton(i)){
-                    sol = kSolenoidMapping[0][i];
+            if(jsRight.getRawButton(i)){
+                sol = kSolenoidMapping[1][i];
                     if(sol < 0){
-                        solenoids[-sol].set(false);
+                        solenoids[-sol-1].set(false);
                     }else if(sol > 0){
-                        solenoids[sol].set(true);
-                    }
-                }
-
-                if(jsRight.getRawButton(i)){
-                    sol = kSolenoidMapping[1][i];
-                    if(sol < 0){
-                        solenoids[-sol].set(false);
-                    }else if(sol > 0){
-                        solenoids[sol].set(true);
+                        solenoids[sol-1].set(true);
                     }
                 }
 
@@ -430,13 +558,23 @@ public class Robot extends IterativeRobot {
                  */
             }
 
+            if(jsLeft.getRawButton(7)){
+                if(compressor.enabled()){
+                    compressor.stop();
+                }else{
+                    compressor.start();
+                }
+            }
+
 
             //jagArm.set(jsRight.getY(), syncGroup);
             //jagArmD.set(jsRight.getY(), syncGroup);
             //CANJaguar.updateSyncGroup(syncGroup);
             if(kUseCAN){
-                //arm.set(-1.0 * jsRight.getY());
+                arm.set(jsRight.getY());
             }
+
+
 
             // tune PID... TODO
             if((period % 10) == 0){
@@ -487,15 +625,19 @@ public class Robot extends IterativeRobot {
             try {
                 SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
                 SmartDashboard.log(cjagLeft.getPosition(), "Jag L Pos");
+                /*
                 SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
                 SmartDashboard.log(cjagLeft.getOutputCurrent(), "Jag L Iout");
                 SmartDashboard.log(cjagLeftD.getOutputCurrent(), "Jag LD Iout");
-
+*/
                 SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
                 SmartDashboard.log(cjagRight.getPosition(), "Jag R Pos");
+                /*
                 SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
                 SmartDashboard.log(cjagRight.getOutputCurrent(), "Jag R Iout");
                 SmartDashboard.log(cjagRightD.getOutputCurrent(), "Jag RD Iout");
+                 * 
+                 */
                 SmartDashboard.log(false, "CAN Error");
 
             } catch (CANTimeoutException ex) {
@@ -513,28 +655,32 @@ public class Robot extends IterativeRobot {
         }
         if(true){
             SmartDashboard.log(encLeft.getDistance(), "Enc L Dist");
-            SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
+            //SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
             
             SmartDashboard.log(encRight.getDistance(), "Enc R Dist");
             SmartDashboard.log(encRight.getRate(), "Enc R Speed");
         }
 
         SmartDashboard.log(gyroXY.getAngle(), "Gyro");
-        SmartDashboard.log(therm.getTemperature(), "Temp (C)");
+        //SmartDashboard.log(therm.getTemperature(), "Temp (C)");
 
         SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kX), "Accel X");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
-        SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
+        //SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kY), "Accel Y");
+        //SmartDashboard.log(accel.getAcceleration(ADXL345_I2C.Axes.kZ), "Accel Z");
 
         SmartDashboard.log(lineLeft.get(), "Line L");
         SmartDashboard.log(lineMid.get(), "Line M");
         SmartDashboard.log(lineRight.get(), "Line R");
 
+        SmartDashboard.log(arm.get(), "Arm position");
+        SmartDashboard.log(arm.getSetpoint(), "Arm setpoint");
+        SmartDashboard.log(jsRight.getY(), "Arm JS");
+
         SmartDashboard.log(transducer.getPSI(), "Pressure (PSI)");
 
-        SmartDashboard.log(kSpeedP, "Speed loop P");
-        SmartDashboard.log(kSpeedI, "Speed loop I");
-        SmartDashboard.log(kSpeedD, "Speed loop D");
+        //SmartDashboard.log(kSpeedP, "Speed loop P");
+        //SmartDashboard.log(kSpeedI, "Speed loop I");
+        //SmartDashboard.log(kSpeedD, "Speed loop D");
 
         if(kUsePositionTracker){
             SmartDashboard.log(posTrack.getX(), "Pos X");

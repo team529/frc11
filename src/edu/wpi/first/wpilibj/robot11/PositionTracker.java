@@ -59,7 +59,7 @@ public class PositionTracker {
         dr = getRightDist();
         vavg = 0.5 * (dl + dr);
 
-        m_theta += 0.5 * (dl - dr) / m_wheelSpacing;
+        m_theta += 0.5 * (dl - dr) / m_wheelSpacing * 180 / Math.PI;
         m_xPos += vavg * Math.cos(m_theta);
         m_yPos += vavg * Math.sin(m_theta);
     }
