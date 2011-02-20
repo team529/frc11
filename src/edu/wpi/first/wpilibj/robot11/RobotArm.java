@@ -9,6 +9,8 @@ import edu.wpi.first.wpilibj.AnalogChannel;
 import edu.wpi.first.wpilibj.CANJaguar;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.PIDController;
+import edu.wpi.first.wpilibj.PIDOutput;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.can.CANTimeoutException;
 
@@ -121,7 +123,8 @@ public class RobotArm {
     private Encoder m_enc;
     private DigitalInput m_indexSw;
 
-    private boolean kUsePositionControl = false;
+    private boolean kUseCRioPositionControl = true;
+    private boolean kUseJagPositionControl = false;
 
     private static final double kArmScale = 100;
     private static final int kEncCodesPerRev = 40;
@@ -132,16 +135,64 @@ public class RobotArm {
 
     private static final byte syncGroup = 0x20;
 
+    private double m_setpoint;
+    private double m_offset = 0.0;
+    private PIDController m_pid;
     
     private Target m_target ;
     
     public RobotArm(CANJaguar leftArmJag, CANJaguar rightArmJag, boolean usePositionControl){
         m_leftJag = leftArmJag;
         m_rightJag = rightArmJag;
-        kUsePositionControl = usePositionControl;
+        kUseJagPositionControl = usePositionControl;
+        kUseCRioPositionControl = false;
 
         configureCAN(m_leftJag);
         configureCAN(m_rightJag);
+    }
+    public RobotArm(CANJaguar leftArmJag, CANJaguar rightArmJag, Encoder armEncoder, boolean usePositionControl){
+        m_leftJag = leftArmJag;
+        m_rightJag = rightArmJag;
+
+        m_enc = armEncoder;
+        kUseJagPositionControl = false;
+        kUseCRioPositionControl = usePositionControl;
+        if(kUseCRioPositionControl){
+            m_pid = new PIDController(kPosP, kPosI, kPosD, m_enc, new PIDOutput(){
+                public void pidWrite(double output){
+                    setRaw(scaleOutput(output, getArmAngle()));
+                    
+                }
+            });
+            m_pid.setInputRange(-100, 200);
+            m_pid.setOutputRange(-1.0, 1.0);
+            m_pid.setTolerance(5);
+            
+        }
+    }
+    public double scaleOutput(double v, double angle){
+        v *= 1;
+        double force = Math.cos(angle);
+        double kForceScale = 0.2;
+        /*
+        if(v < 0){
+            if(force < 0){
+                v /= (-force + 1);
+            }else{
+                v /= (force + 1);
+            }
+        }else{
+            if(force > 0){
+                v /= (force + 1);
+            }else{
+                v /= (-force + 1);
+            }
+        }*/
+        v += force * kForceScale;
+        return v;
+    }
+    public double getArmAngle(){
+        return m_enc.getDistance() - Math.PI / 2;
     }
     public boolean setTarget(Target t){
         Target lazyT;
@@ -159,32 +210,66 @@ public class RobotArm {
             m_solenoid.set(!m_solenoid.get());
         }
         m_target = lazyT;
-        if(kUsePositionControl){
+        /*if(kUsePositionControl){
             setRaw(height);
-        }
+        }*/
+        set(height);
         return false;
     }
     public void setRaw(double v){
         try {
-            m_leftJag.set(v, syncGroup);
-            m_rightJag.set(v, syncGroup);
+            m_leftJag.setX(v, syncGroup);
+            m_rightJag.setX(v, syncGroup);
             CANJaguar.updateSyncGroup(syncGroup);
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
         }
     }
+    public void setOffset(double v){
+        m_offset = v;
+    }
+    public double getOffset(){
+        return  m_offset;
+    }
     public void set(double v){
         try {
-            m_leftJag.setX(v * kArmScale, syncGroup);
-            m_rightJag.setX(v * kArmScale, syncGroup);
-            CANJaguar.updateSyncGroup(syncGroup);
+            if(kUseJagPositionControl){
+                m_leftJag.setX(v * kArmScale, syncGroup);
+                m_rightJag.setX(v * kArmScale, syncGroup);
+                CANJaguar.updateSyncGroup(syncGroup);
+            }else if(kUseCRioPositionControl){
+                if(m_setpoint != v + m_offset){
+                    m_setpoint = v + m_offset;
+                    m_pid.setSetpoint(m_setpoint);
+                    m_pid.enable();
+                }
+            }else{
+                setRaw(v);
+            }
+            
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
+        }
+    }
+    public void poll(){
+        //TODO: Thread
+        if(kUseJagPositionControl){
+
+        }else if(kUseCRioPositionControl){
+            if(m_pid.onTarget()){
+                m_pid.disable();
+            }
         }
     }
     public double get(){
         try {
-            return m_leftJag.getPosition();
+            if(kUseJagPositionControl){
+                return m_leftJag.getPosition();
+            }else if(kUseCRioPositionControl){
+                return m_setpoint;
+            }else{
+                return m_leftJag.getX();
+            }
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
             return 0;
@@ -192,7 +277,11 @@ public class RobotArm {
     }
     public double getSetpoint(){
         try {
-            return m_leftJag.getX();
+            if(kUseCRioPositionControl){
+                return m_setpoint;
+            }else{
+                return m_leftJag.getX();
+            }
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
             return 0;
@@ -202,21 +291,47 @@ public class RobotArm {
 
     private void configureCAN(CANJaguar cjag){
         try {
-            if (kUsePositionControl) {
+            
+            if (kUseJagPositionControl) {
                 cjag.changeControlMode(CANJaguar.ControlMode.kPosition);
                 cjag.setPositionReference(CANJaguar.PositionReference.kQuadEncoder);
                 cjag.configEncoderCodesPerRev(kEncCodesPerRev);
                 //cjag.configMaxOutputVoltage(10);
                 //cjag.setVoltageRampRate(1.0);
                 cjag.setPID(kPosP, kPosI, kPosD);
-
+                cjag.enableControl();
             } else {
+             
                 cjag.changeControlMode(CANJaguar.ControlMode.kPercentVbus);
+            
             }
+
             cjag.configNeutralMode(CANJaguar.NeutralMode.kBrake);
-            cjag.enableControl();
+            
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
         }
+    }
+    public boolean onTarget(){
+        if(kUseJagPositionControl){
+            return false;
+        }else if(kUseCRioPositionControl){
+            return m_pid.onTarget();
+        }else{
+            return false;
+        }
+    }
+    public void setPID(double p, double i, double d){
+        if(kUseJagPositionControl){
+            try {
+                m_leftJag.setPID(p, i, d);
+                m_rightJag.setPID(p, i, d);
+            } catch (CANTimeoutException ex) {
+                ex.printStackTrace();
+            }
+        }else if(kUseCRioPositionControl){
+            m_pid.setPID(p, i, d);
+        }
+
     }
 }

@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project-private xmlns="http://www.netbeans.org/ns/project-private/1">
-    <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/1"/>
+    <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/1">
+        <file>
+            <url>src/edu/wpi/first/wpilibj/robot11/RobotArm.java</url>
+            <line>128</line>
+            <line>281</line>
+        </file>
+        <file>
+            <url>src/edu/wpi/first/wpilibj/robot11/Robot.java</url>
+            <line>84</line>
+            <line>178</line>
+            <line>265</line>
+            <line>499</line>
+        </file>
+    </editor-bookmarks>
 </project-private>

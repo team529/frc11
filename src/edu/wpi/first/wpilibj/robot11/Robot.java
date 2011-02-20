@@ -62,6 +62,7 @@ public class Robot extends IterativeRobot {
     
     private Encoder encLeft;
     private Encoder encRight;
+    private Encoder encArm;
 
     private DigitalInput lineRight;
     private DigitalInput lineMid;
@@ -102,16 +103,21 @@ public class Robot extends IterativeRobot {
 
     //
     private static final int kEncCodesPerRev = 360;       // rev
-    private static final double kEncDistPerPulse = 1 / 360.0 * 8;   // [dist]
-    private static final double kGyroSensitivity = 0.005;  // V/(rad/s)
+    private static final double kEncDistPerPulse = 1 / 360.0 * 16 * Math.PI;   // [dist]
+    private static final double kGyroSensitivity = 0.007;  // V/(rad/s)
+
+    // Arm
+    private static final double kEncArmRadPerPulse = 1 / 300.0;
 
 
     // PID parameters for speed control
     //TODO: Tune & set as final
     private static final double kSpeedPIDInvert = 1; // +/-1
-    private static double kSpeedP = 0.1 * kSpeedPIDInvert;
-    private static double kSpeedI = 0.000 * kSpeedPIDInvert;
-    private static double kSpeedD = 0.000 * kSpeedPIDInvert;
+    private static double kSpeedP = 0.150 * kSpeedPIDInvert;
+    private static double kSpeedI = 0.002 * kSpeedPIDInvert;
+    private static double kSpeedD = 0.005 * kSpeedPIDInvert;
+    // If two jags get out of sync, correct them
+    private static final double kDualJagTuneP = 0.1;
 
     // Test dark line on white carpet
     private static final boolean kInvertLineSensor = false;
@@ -154,6 +160,7 @@ public class Robot extends IterativeRobot {
     private long period;
     // Autonomous state
     private int aState;
+    
 
 
     private void canJaguarInit(CANJaguar cjag) throws CANTimeoutException{
@@ -286,6 +293,10 @@ public class Robot extends IterativeRobot {
         encLeft.start();
         encRight.reset();
         encRight.start();
+        encArm = new Encoder(kSlotDigital, 1, kSlotDigital, 2);
+        encArm.setDistancePerPulse(kEncArmRadPerPulse);
+        encArm.reset();
+        encArm.start();
 
         accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
         therm = new Thermometer(kSlotAnalog, 2);
@@ -574,10 +585,13 @@ public class Robot extends IterativeRobot {
                 arm.set(jsRight.getY());
             }
 
-
-
-            // tune PID... TODO
-            if((period % 10) == 0){
+            // If Jags get out of sync...
+            if((period % 3) == 0){
+                tuneDualJags();
+            }
+            
+            // tune PID... 
+            if((period % 10) == 0 && false){
                 /*
                  * Tuning PID:
                  * I = 0; D = 0
@@ -591,14 +605,15 @@ public class Robot extends IterativeRobot {
                  * P:
                  *
                  */
+
                 try {
                     double f = jsLeft.getZ() * jsRight.getZ() * 0.1;
                     SmartDashboard.log(f, "PID Adj");
                     
-                    cjagLeft.setPID(0.15, 0.002, f);
-                    cjagLeftD.setPID(0.15, 0.002, f);
-                    cjagRight.setPID(0.15, 0.002, f);
-                    cjagRightD.setPID(0.15, 0, 0);
+                    cjagLeft.setPID(0.15, 0.002, 0.003);
+                    cjagLeftD.setPID(0.15, 0.002, 0.003);
+                    cjagRight.setPID(0.15, 0.002, 0.003);
+                    cjagRightD.setPID(0.15, 0.002, 0.003);
                     /*
                     arm.m_leftJag.setPID(f, 0, 0);
                     arm.m_rightJag.setPID(f, 0, 0);
@@ -615,6 +630,36 @@ public class Robot extends IterativeRobot {
         log();
     }
 
+    private void tuneDualJags(){
+        try {
+            double goal;
+            double error;
+            double v1;
+            double v2;
+            goal = cjagLeft.getX();
+            v1 = cjagLeft.getOutputVoltage();
+            v2 = cjagLeftD.getOutputVoltage();
+
+            error = (v1 - v2) * kDualJagTuneP;
+            cjagLeft.setX(goal - error);
+            cjagLeftD.setX(goal + error);
+
+            SmartDashboard.log(error * 8, "PID %Err L");
+
+            goal = cjagRight.getX();
+            v1 = cjagRight.getOutputVoltage();
+            v2 = cjagRightD.getOutputVoltage();
+
+            error = (v1 - v2) * kDualJagTuneP;
+            cjagRight.setX(goal - error);
+            cjagRightD.setX(goal + error);
+
+            SmartDashboard.log(error * 8, "PID %Err R");
+        } catch (CANTimeoutException ex) {
+            ex.printStackTrace();
+        }
+
+    }
     private void log(){
         SmartDashboard.log(ds.getBatteryVoltage(), "Battery Voltage");
         SmartDashboard.log(ds.getLocation(), "Field Pos");
