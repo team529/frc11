@@ -64,6 +64,8 @@ public class Robot extends IterativeRobot {
     private Encoder encRight;
     private Encoder encArm;
 
+    private DigitalInput armIndex;
+
     private DigitalInput lineRight;
     private DigitalInput lineMid;
     private DigitalInput lineLeft;
@@ -124,7 +126,7 @@ public class Robot extends IterativeRobot {
     // Sqrt of deadbad value for joystick
     private static final double kDeadband = 0.1;
     // Maximum speed. Will autoadjust using PIDSpCtrl
-    private static final double kMaxSpeed = 1000; // kEncCodesPerRev / min
+    private static final double kMaxSpeed = 430; // kEncCodesPerRev / min
     // Autonomous speed as %
     private static final double kAutoSpeed = 0.4;
     // Autonomous turing radius as %
@@ -160,6 +162,7 @@ public class Robot extends IterativeRobot {
     private long period;
     // Autonomous state
     private int aState;
+    private boolean armIndexState;
     
 
 
@@ -173,6 +176,7 @@ public class Robot extends IterativeRobot {
             cjag.changeControlMode(CANJaguar.ControlMode.kPercentVbus);
         }
         cjag.configNeutralMode(CANJaguar.NeutralMode.kBrake);
+        cjag.setVoltageRampRate(0.5);
         cjag.enableControl();
     }
 
@@ -210,7 +214,7 @@ public class Robot extends IterativeRobot {
                 cjagArm = new CANJaguar(20);
                 cjagArmD = new CANJaguar(21);
 
-                arm = new RobotArm(cjagArm, cjagArmD, kUseArmPosition);
+                //arm = new RobotArm(cjagArm, cjagArmD, kUseArmPosition);
 
             } catch (CANTimeoutException ex) {
                 ex.printStackTrace();
@@ -287,26 +291,33 @@ public class Robot extends IterativeRobot {
 
         encLeft = new Encoder(kSlotDigital, 8, kSlotDigital, 9);
         encRight = new Encoder(kSlotDigital, 11, kSlotDigital, 12);
+     
         encLeft.setDistancePerPulse(kEncDistPerPulse);
         encRight.setDistancePerPulse(kEncDistPerPulse);
         encLeft.reset();
         encLeft.start();
         encRight.reset();
         encRight.start();
-        encArm = new Encoder(kSlotDigital, 1, kSlotDigital, 2);
+
+        encArm = new Encoder(kSlotDigital, 2, kSlotDigital, 1);
         encArm.setDistancePerPulse(kEncArmRadPerPulse);
         encArm.reset();
         encArm.start();
+
+        armIndex = new DigitalInput(kSlotDigital, 3);
+        
 
         accel = new ADXL345_I2C(kSlotDigital, ADXL345_I2C.DataFormat_Range.k4G);
         therm = new Thermometer(kSlotAnalog, 2);
         gyroXY = new Gyro(kSlotAnalog, 1);
 
         // Calibration works well enough
-        gyroXY.setSensitivity(kGyroSensitivity);
+        //gyroXY.setSensitivity(kGyroSensitivity);
         gyroXY.reset();
 
+        arm = new RobotArm(cjagArm, cjagArmD, encArm, true);
 
+        
         if(kUsePositionTracker){
             if(false && kUseCAN){
                 posTrack = new PositionTracker(cjagLeft, cjagRight);
@@ -321,9 +332,9 @@ public class Robot extends IterativeRobot {
             posTrack.setTheta(kInitialTheta);
         }
         
-        turnController = new PIDController(0.02, 0.001, 0.001, gyroXY, new PIDOutput() {
+        turnController = new PIDController(0.07, 0.005, 0.010, gyroXY, new PIDOutput() {
             public void pidWrite(double output) {
-                drive.arcadeDrive(0, output * 0.5);
+                drive.arcadeDrive(0, output * -0.5);
             }
         }, .005);
         //turnController.setInputRange(-360.0, 360.0);
@@ -342,11 +353,7 @@ public class Robot extends IterativeRobot {
     }
 
     public void disabledPeriodic(){
-        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
-            posTrack.update();
-        }
-
-        log();
+        poll();
         
     }
 
@@ -357,10 +364,6 @@ public class Robot extends IterativeRobot {
     }
 
     public void autonomousPeriodic() {
-        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
-            posTrack.update();
-        }
-
         boolean swL, swM, swR;
         swL = lineLeft.get() ^ kInvertLineSensor;
         swM = lineMid.get() ^ kInvertLineSensor;
@@ -481,8 +484,7 @@ public class Robot extends IterativeRobot {
         }else{
             drive.drive(-0.08, 0.0);
         }
-
-        log();
+        poll();
     }
 
     public void teleopInit(){
@@ -499,10 +501,7 @@ public class Robot extends IterativeRobot {
     
     public void teleopPeriodic() {
         double angle = gyroXY.getAngle();
-        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
-            posTrack.update();
-        }
-
+        
         if(true || ds.isNewControlData()){
             Vector dir = new Vector();
             dir.setX(-jsLeft.getX());
@@ -519,7 +518,7 @@ public class Robot extends IterativeRobot {
                 double err = turnController.getError();
                 SmartDashboard.log(err, "Turn Err");
                 SmartDashboard.log(turnController.get(), "Turn Out");
-                if((err < 3 && turnController.get() < 0.1) || jsLeft.getTrigger()){
+                if((false) || jsLeft.getTrigger()){
                     turnController.disable();
                 }
             }else{
@@ -533,9 +532,11 @@ public class Robot extends IterativeRobot {
 
                 if(jsLeft.getRawButton(8)){
                 turnController.setSetpoint(angle - (angle % 90) );
+                turnController.reset();
                 turnController.enable();
             }else if(jsLeft.getRawButton(9)){
                 turnController.setSetpoint(angle - (angle % 90) + 90);
+                turnController.reset();
                 turnController.enable();
             }
         }
@@ -582,7 +583,7 @@ public class Robot extends IterativeRobot {
             //jagArmD.set(jsRight.getY(), syncGroup);
             //CANJaguar.updateSyncGroup(syncGroup);
             if(kUseCAN){
-                arm.set(jsRight.getY());
+                arm.set(jsRight.getY() );
             }
 
             // If Jags get out of sync...
@@ -591,7 +592,7 @@ public class Robot extends IterativeRobot {
             }
             
             // tune PID... 
-            if((period % 10) == 0 && false){
+            if((period % 10) == 0){
                 /*
                  * Tuning PID:
                  * I = 0; D = 0
@@ -607,13 +608,21 @@ public class Robot extends IterativeRobot {
                  */
 
                 try {
-                    double f = jsLeft.getZ() * jsRight.getZ() * 0.1;
+                    double f = jsLeft.getZ() * jsRight.getZ()  ;
+                    SmartDashboard.useBlockingIO(true);
                     SmartDashboard.log(f, "PID Adj");
+                    SmartDashboard.useBlockingIO(false);
+
                     
-                    cjagLeft.setPID(0.15, 0.002, 0.003);
-                    cjagLeftD.setPID(0.15, 0.002, 0.003);
-                    cjagRight.setPID(0.15, 0.002, 0.003);
-                    cjagRightD.setPID(0.15, 0.002, 0.003);
+                    cjagLeft.setPID(0.8, 0, 0);
+                    cjagLeftD.setPID(0.8, 0, 0);
+                    cjagRight.setPID(0.8, 0, 0);
+                    cjagRightD.setPID(0.8, 0, 0);
+                  
+                    //arm.setPID(f, 0, 0);
+
+                    turnController.setPID(0.120, 0.003, 0.04);
+
                     /*
                     arm.m_leftJag.setPID(f, 0, 0);
                     arm.m_rightJag.setPID(f, 0, 0);
@@ -627,7 +636,7 @@ public class Robot extends IterativeRobot {
             }
         }
 
-        log();
+        poll();
     }
 
     private void tuneDualJags(){
@@ -660,23 +669,37 @@ public class Robot extends IterativeRobot {
         }
 
     }
+
+    private void poll(){
+        period++;
+        if(kUsePositionTracker && (period % kPositionUpdatePeriod == 0)){
+            posTrack.update();
+        }
+        
+        if(!armIndex.get() && armIndexState){
+            encArm.reset();
+        }
+        armIndexState = armIndex.get();
+
+        log();
+    }
     private void log(){
         SmartDashboard.log(ds.getBatteryVoltage(), "Battery Voltage");
-        SmartDashboard.log(ds.getLocation(), "Field Pos");
+        //SmartDashboard.log(ds.getLocation(), "Field Pos");
         SmartDashboard.log(ds.getAlliance() == DriverStation.Alliance.kRed ? "Red" : "Blue",
                            "Alliance");
 
-        if(kUseCAN && (period++ % 5 == 0)){ // Don't overload the CAN network
+        if(kUseCAN && (period % 2 == 0)){ // Don't overload the CAN network
             try {
                 SmartDashboard.log(cjagLeft.getSpeed(), "Jag L Speed");
-                SmartDashboard.log(cjagLeft.getPosition(), "Jag L Pos");
+                //SmartDashboard.log(cjagLeft.getPosition(), "Jag L Pos");
                 /*
                 SmartDashboard.log(cjagLeft.getOutputVoltage(), "Jag L Vout");
                 SmartDashboard.log(cjagLeft.getOutputCurrent(), "Jag L Iout");
                 SmartDashboard.log(cjagLeftD.getOutputCurrent(), "Jag LD Iout");
 */
                 SmartDashboard.log(cjagRight.getSpeed(), "Jag R Speed");
-                SmartDashboard.log(cjagRight.getPosition(), "Jag R Pos");
+                //SmartDashboard.log(cjagRight.getPosition(), "Jag R Pos");
                 /*
                 SmartDashboard.log(cjagRight.getOutputVoltage(), "Jag R Vout");
                 SmartDashboard.log(cjagRight.getOutputCurrent(), "Jag R Iout");
@@ -700,7 +723,7 @@ public class Robot extends IterativeRobot {
         }
         if(true){
             SmartDashboard.log(encLeft.getDistance(), "Enc L Dist");
-            //SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
+            SmartDashboard.log(encLeft.getRate(), "Enc L Speed");
             
             SmartDashboard.log(encRight.getDistance(), "Enc R Dist");
             SmartDashboard.log(encRight.getRate(), "Enc R Speed");
@@ -720,6 +743,8 @@ public class Robot extends IterativeRobot {
         SmartDashboard.log(arm.get(), "Arm position");
         SmartDashboard.log(arm.getSetpoint(), "Arm setpoint");
         SmartDashboard.log(jsRight.getY(), "Arm JS");
+        //SmartDashboard.log()
+        SmartDashboard.log(!armIndex.get(), "Arm Index");
 
         SmartDashboard.log(transducer.getPSI(), "Pressure (PSI)");
 
@@ -729,8 +754,8 @@ public class Robot extends IterativeRobot {
 
         if(kUsePositionTracker){
             SmartDashboard.log(posTrack.getX(), "Pos X");
-            SmartDashboard.log(posTrack.getY(), "Pos Y");
-            SmartDashboard.log(posTrack.getTheta() / Math.PI * 180, "Pos Angle");
+            //SmartDashboard.log(posTrack.getY(), "Pos Y");
+            //SmartDashboard.log(posTrack.getTheta(), "Pos Angle");
         }
     }
 
