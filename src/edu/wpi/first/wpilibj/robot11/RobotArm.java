@@ -157,16 +157,17 @@ public class RobotArm {
         m_enc = armEncoder;
         kUseJagPositionControl = false;
         kUseCRioPositionControl = usePositionControl;
+        m_enc.setPIDSourceParameter(Encoder.PIDSourceParameter.kDistance);
         if(kUseCRioPositionControl){
             m_pid = new PIDController(kPosP, kPosI, kPosD, m_enc, new PIDOutput(){
                 public void pidWrite(double output){
-                    setRaw(scaleOutput(output, getArmAngle()));
-                    
+                    //setRaw(scaleOutput(output, getArmAngle()));
+                    setRaw(output);
                 }
             });
-            m_pid.setInputRange(-100, 200);
+            m_pid.setInputRange(-10, 20);
             m_pid.setOutputRange(-1.0, 1.0);
-            m_pid.setTolerance(5);
+            //m_pid.setTolerance(5);
             
         }
     }
@@ -238,11 +239,12 @@ public class RobotArm {
                 m_rightJag.setX(v * kArmScale, syncGroup);
                 CANJaguar.updateSyncGroup(syncGroup);
             }else if(kUseCRioPositionControl){
-                if(m_setpoint != v + m_offset){
+                v *= 10;
+                //if(m_setpoint != v + m_offset){
                     m_setpoint = v + m_offset;
                     m_pid.setSetpoint(m_setpoint);
                     m_pid.enable();
-                }
+               // }
             }else{
                 setRaw(v);
             }
@@ -266,9 +268,11 @@ public class RobotArm {
             if(kUseJagPositionControl){
                 return m_leftJag.getPosition();
             }else if(kUseCRioPositionControl){
-                return m_setpoint;
+                //return m_setpoint;
+                return m_enc.getDistance();
             }else{
-                return m_leftJag.getX();
+                return m_enc.getDistance();
+                //return m_leftJag.getX();
             }
         } catch (CANTimeoutException ex) {
             ex.printStackTrace();
