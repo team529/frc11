@@ -83,6 +83,7 @@ public class Robot extends IterativeRobot {
 
     private PIDController turnController;
 
+    
     // Location of cRIO modules
     private static final int kSlotDigital = 4;
     private static final int kSlotAnalog = 1;
@@ -124,7 +125,7 @@ public class Robot extends IterativeRobot {
     // Test dark line on white carpet
     private static final boolean kInvertLineSensor = false;
     // Sqrt of deadbad value for joystick
-    private static final double kDeadband = 0.1;
+    private static final double kDeadband = 0.05;
     // Maximum speed. Will autoadjust using PIDSpCtrl
     private static final double kMaxSpeed = 430; // kEncCodesPerRev / min
     // Autonomous speed as %
@@ -152,8 +153,8 @@ public class Robot extends IterativeRobot {
     // 1st array is driver stick. 2nd is arm operator
     private static int kSolenoidMapping[][] = {
     //   00  01  02  03  04  05  06  07  08  09  10  11
-        {0,  0,  1, -1,  2, -2,  0,  0,  0,  0,  0,  0},
-        {0,  1,  1, -1,  2, -2,  3, -3,  4, -4,  5, -5},
+        {0,  0,  1, -1,  2, -2,  0,  0,  0,  0,  0,  0}, // Left Joystick
+        {0,  1,  1, -1,  2, -2,  3, -3,  4, -4,  5, -5}, // Right Joystick
     };
 
 
@@ -525,6 +526,7 @@ public class Robot extends IterativeRobot {
                 if(dir.getR2() > kDeadband){
                     drive.arcadeDrive(dir.getY(), dir.getX(), true, jsLeft.getTrigger());
                 }else{
+                    //529!!!
                     //turnController.setSetpoint(gyroXY.pidGet());
                     //turnController.disable() ;
                     drive.stopMotor();
@@ -583,7 +585,7 @@ public class Robot extends IterativeRobot {
             //jagArmD.set(jsRight.getY(), syncGroup);
             //CANJaguar.updateSyncGroup(syncGroup);
             if(kUseCAN){
-                arm.set(jsRight.getY() );
+                arm.set(-0.5 * jsRight.getY()); //***FIXME
             }
 
             // If Jags get out of sync...
