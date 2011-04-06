@@ -93,7 +93,7 @@ public class Robot extends IterativeRobot {
     // Use CAN jags? (Encoders / lim switches read over CAN too)
     private static boolean kUseCAN = true;
     // Use PID onboard jags. TODO: Tune
-    private static final boolean kUseOnboardPid = true;
+    private static final boolean kUseOnboardPid = false;
     // Use PID calc on cRIO to ctrl speed, using PIDSpCtrl. Removed.
     private static final boolean kUsePidSpeed = kUseOnboardPid;
     // Use gyro to use relative controls. TODO: Test craziness
@@ -176,7 +176,7 @@ public class Robot extends IterativeRobot {
             cjag.changeControlMode(CANJaguar.ControlMode.kPercentVbus);
         }
         cjag.configNeutralMode(CANJaguar.NeutralMode.kBrake);
-        cjag.setVoltageRampRate(0.5);
+        cjag.setVoltageRampRate(0.1);
         cjag.enableControl();
     }
 
@@ -374,7 +374,7 @@ public class Robot extends IterativeRobot {
             drive.drive(0, 0);
             aState = 10;
         }
-
+        SmartDashboard.log(aState, "Auto State");
         switch(aState){
             case 0:
                 // Get on line by approx drive straight
@@ -414,7 +414,7 @@ public class Robot extends IterativeRobot {
                         aState = 3;
                     }else{
                         // Completely lost the line
-                        drive.drive(-kAutoSpeed / 4, 0);
+                        drive.drive(-kAutoSpeed / 2, 0);
                         aState = 1;
                     }
                 }
@@ -608,16 +608,15 @@ public class Robot extends IterativeRobot {
                  */
 
                 try {
-                    double f = jsLeft.getZ() * jsRight.getZ()  ;
+                    double f = jsLeft.getZ() * jsRight.getZ() * 0.1;
                     SmartDashboard.useBlockingIO(true);
                     SmartDashboard.log(f, "PID Adj");
                     SmartDashboard.useBlockingIO(false);
 
-                    
-                    cjagLeft.setPID(0.8, 0, 0);
-                    cjagLeftD.setPID(0.8, 0, 0);
-                    cjagRight.setPID(0.8, 0, 0);
-                    cjagRightD.setPID(0.8, 0, 0);
+                    cjagLeft.setPID(0.17, 0.01, 0.02);
+                    cjagLeftD.setPID(0.17, 0.01, 0.02);
+                    cjagRight.setPID(0.17, 0.01, 0.02);
+                    cjagRightD.setPID(0.17, 0.01, 0.02);
                   
                     //arm.setPID(f, 0, 0);
 
